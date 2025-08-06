@@ -30,7 +30,7 @@ def test_complete_workflow():
     try:
         # Initialize the processor
         processor = RocksmithGuitarMute(
-            demucs_model="htdemucs",
+            demucs_model="htdemucs_6s",
             device="cpu"  # Use CPU for reliable testing
         )
         

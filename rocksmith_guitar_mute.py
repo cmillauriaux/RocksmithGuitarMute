@@ -53,7 +53,7 @@ except ImportError:
 class RocksmithGuitarMute:
     """Main class for processing Rocksmith PSARC files to remove guitar tracks."""
     
-    def __init__(self, demucs_model: str = "htdemucs", device: str = "auto"):
+    def __init__(self, demucs_model: str = "htdemucs_6s", device: str = "auto"):
         """
         Initialize the processor.
         
@@ -287,23 +287,23 @@ class RocksmithGuitarMute:
                 stems[stem_name] = audio
                 self.logger.debug(f"Loaded stem: {stem_name}")
             
-            # Combine all sources except 'other' (which typically contains guitar)
+            # Combine all sources except 'guitar' (htdemucs_6s has dedicated guitar separation)
             backing_stems = []
-            exclude_stems = ['other']  # 'other' typically contains guitar/lead instruments
+            exclude_stems = ['guitar']  # htdemucs_6s separates guitar as its own source
             
             for stem_name, stem_audio in stems.items():
                 if stem_name not in exclude_stems:
                     backing_stems.append(stem_audio)
-                    self.logger.debug(f"Including stem: {stem_name}")
+                    self.logger.info(f"Including stem: {stem_name}")
                 else:
-                    self.logger.debug(f"Excluding stem: {stem_name} (contains guitar)")
+                    self.logger.info(f"Excluding stem: {stem_name} (guitar track)")
             
             # Mix the backing tracks
             if backing_stems:
                 backing_track = torch.stack(backing_stems).sum(dim=0)
             else:
-                # Fallback: use drums + bass + vocals if available
-                fallback_stems = ['drums', 'bass', 'vocals']
+                # Fallback: use all htdemucs_6s sources except guitar
+                fallback_stems = ['drums', 'bass', 'vocals', 'other', 'piano']
                 backing_track = None
                 for stem_name in fallback_stems:
                     if stem_name in stems:
@@ -311,6 +311,7 @@ class RocksmithGuitarMute:
                             backing_track = stems[stem_name].clone()
                         else:
                             backing_track += stems[stem_name]
+                        self.logger.info(f"Using fallback stem: {stem_name}")
                 
                 if backing_track is None:
                     raise ValueError("No suitable stems found for backing track")

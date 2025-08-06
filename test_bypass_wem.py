@@ -32,7 +32,7 @@ def test_workflow_with_ogg():
     try:
         # Initialize the processor
         processor = RocksmithGuitarMute(
-            demucs_model="htdemucs",
+            demucs_model="htdemucs_6s",
             device="cpu"  # Use CPU for reliable testing
         )
         
