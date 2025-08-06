@@ -1,0 +1,12 @@
+# Core dependencies for RockSmith Guitar Mute
+torch>=2.0.0
+torchaudio>=2.0.0
+demucs
+
+# Optional: CUDA support (install separately if needed)
+# torch[cuda] for GPU acceleration
+
+# Development dependencies (optional)
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0

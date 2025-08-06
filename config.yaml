@@ -1,0 +1,76 @@
+# RockSmith Guitar Mute Configuration
+
+# Demucs settings
+demucs:
+  # Model to use for source separation
+  # Options: htdemucs, htdemucs_ft, mdx_extra, mdx_extra_q, mdx_q, hdemucs_mmi
+  model: "htdemucs"
+  
+  # Device to use for processing
+  # Options: auto, cpu, cuda
+  device: "auto"
+  
+  # Number of random shifts for time-equivariant prediction
+  # Higher values improve quality but increase processing time
+  shifts: 1
+  
+  # Overlap between segments (0.0 to 1.0)
+  overlap: 0.25
+  
+  # Whether to split long audio into segments
+  split: true
+  
+  # Segment length in seconds (null for automatic)
+  segment: null
+  
+  # Number of parallel jobs (0 for automatic)
+  jobs: 0
+  
+  # Show progress during processing
+  progress: true
+
+# Audio processing settings
+audio:
+  # Output format for intermediate files
+  intermediate_format: "wav"
+  
+  # Sample rate for processing (null to preserve original)
+  sample_rate: null
+  
+  # Bit depth for intermediate files
+  bit_depth: 16
+  
+  # Stems to exclude from backing track
+  # 'other' typically contains guitar/lead instruments
+  exclude_stems: ["other"]
+  
+  # Fallback stems to include if exclude method fails
+  fallback_stems: ["drums", "bass", "vocals"]
+
+# Processing settings
+processing:
+  # Whether to preserve original files
+  preserve_originals: true
+  
+  # Temporary directory for processing (null for system temp)
+  temp_dir: null
+  
+  # Whether to clean up temporary files
+  cleanup_temp: true
+  
+  # Maximum number of concurrent PSARC processing
+  max_concurrent: 1
+
+# Logging settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  
+  # Whether to log to file
+  log_to_file: true
+  
+  # Log file name
+  log_file: "rocksmith_guitar_mute.log"
+  
+  # Whether to show progress bars
+  show_progress: true
