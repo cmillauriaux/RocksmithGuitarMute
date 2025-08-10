@@ -20,11 +20,13 @@ Where:
 import argparse
 import asyncio
 import logging
+import multiprocessing
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -53,7 +55,7 @@ except ImportError:
 class RocksmithGuitarMute:
     """Main class for processing Rocksmith PSARC files to remove guitar tracks."""
     
-    def __init__(self, demucs_model: str = "htdemucs_6s", device: str = "auto"):
+    def __init__(self, demucs_model: str = "htdemucs", device: str = "auto"):
         """
         Initialize the processor.
         
@@ -287,23 +289,23 @@ class RocksmithGuitarMute:
                 stems[stem_name] = audio
                 self.logger.debug(f"Loaded stem: {stem_name}")
             
-            # Combine all sources except 'guitar' (htdemucs_6s has dedicated guitar separation)
+            # Combine all sources except 'other' (which typically contains guitar)
             backing_stems = []
-            exclude_stems = ['guitar']  # htdemucs_6s separates guitar as its own source
+            exclude_stems = ['other']  # 'other' typically contains guitar/lead instruments
             
             for stem_name, stem_audio in stems.items():
                 if stem_name not in exclude_stems:
                     backing_stems.append(stem_audio)
                     self.logger.info(f"Including stem: {stem_name}")
                 else:
-                    self.logger.info(f"Excluding stem: {stem_name} (guitar track)")
+                    self.logger.info(f"Excluding stem: {stem_name} (contains guitar)")
             
             # Mix the backing tracks
             if backing_stems:
                 backing_track = torch.stack(backing_stems).sum(dim=0)
             else:
-                # Fallback: use all htdemucs_6s sources except guitar
-                fallback_stems = ['drums', 'bass', 'vocals', 'other', 'piano']
+                # Fallback: use drums + bass + vocals if available
+                fallback_stems = ['drums', 'bass', 'vocals']
                 backing_track = None
                 for stem_name in fallback_stems:
                     if stem_name in stems:
@@ -409,21 +411,41 @@ class RocksmithGuitarMute:
             if output_dir.exists():
                 shutil.rmtree(output_dir)
     
-    def process_psarc_file(self, psarc_path: Path, output_dir: Path) -> Path:
+    def _output_exists(self, psarc_path: Path, output_dir: Path) -> bool:
         """
-        Process a single PSARC file to remove guitar tracks.
+        Check if the output file already exists.
         
         Args:
             psarc_path: Path to the input PSARC file
             output_dir: Directory for output files
             
         Returns:
-            Path to the processed PSARC file
+            True if output file already exists
+        """
+        output_psarc = output_dir / psarc_path.name
+        return output_psarc.exists()
+
+    def process_psarc_file(self, psarc_path: Path, output_dir: Path, force: bool = False) -> Optional[Path]:
+        """
+        Process a single PSARC file to remove guitar tracks.
+        
+        Args:
+            psarc_path: Path to the input PSARC file
+            output_dir: Directory for output files
+            force: If True, process even if output file exists
+            
+        Returns:
+            Path to the processed PSARC file or None if skipped
         """
         self.logger.info(f"Processing PSARC file: {psarc_path}")
         
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_psarc = output_dir / f"{psarc_path.stem}_no_guitar{psarc_path.suffix}"
+        output_psarc = output_dir / psarc_path.name
+        
+        # Check if output already exists
+        if not force and self._output_exists(psarc_path, output_dir):
+            self.logger.info(f"Output file already exists, skipping: {output_psarc}")
+            return output_psarc
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -470,23 +492,34 @@ class RocksmithGuitarMute:
         
         return output_psarc
     
-    def process_input(self, input_path: Path, output_dir: Path) -> List[Path]:
+    def process_input(self, input_path: Path, output_dir: Path, max_workers: Optional[int] = None, force: bool = False) -> List[Path]:
         """
         Process input path (file or directory) and return list of processed files.
+        Uses parallel processing to maximize performance.
         
         Args:
             input_path: Path to input file or directory
             output_dir: Directory for output files
+            max_workers: Maximum number of parallel workers (default: number of CPU cores)
+            force: If True, process even if output file exists
             
         Returns:
             List of processed PSARC file paths
         """
         processed_files = []
         
+        # Determine max workers (default to number of CPU cores)
+        if max_workers is None:
+            max_workers = multiprocessing.cpu_count()
+        
+        self.logger.info(f"Using {max_workers} parallel workers for processing")
+        
         if input_path.is_file():
             if input_path.suffix.lower() == '.psarc':
-                processed_file = self.process_psarc_file(input_path, output_dir)
-                processed_files.append(processed_file)
+                # Single file processing
+                processed_file = self.process_psarc_file(input_path, output_dir, force=force)
+                if processed_file:
+                    processed_files.append(processed_file)
             else:
                 self.logger.warning(f"Skipping non-PSARC file: {input_path}")
         
@@ -494,18 +527,76 @@ class RocksmithGuitarMute:
             psarc_files = list(input_path.glob("*.psarc"))
             self.logger.info(f"Found {len(psarc_files)} PSARC files in directory")
             
+            if not psarc_files:
+                self.logger.warning("No PSARC files found in directory")
+                return processed_files
+            
+            # Filter files that need processing (skip existing unless force=True)
+            files_to_process = []
             for psarc_file in psarc_files:
-                try:
-                    processed_file = self.process_psarc_file(psarc_file, output_dir)
-                    processed_files.append(processed_file)
-                except Exception as e:
-                    self.logger.error(f"Failed to process {psarc_file}: {e}")
-                    continue
+                if force or not self._output_exists(psarc_file, output_dir):
+                    files_to_process.append(psarc_file)
+                else:
+                    # File already exists, add to results but don't process
+                    existing_file = output_dir / psarc_file.name
+                    processed_files.append(existing_file)
+                    self.logger.info(f"Output already exists, skipping: {existing_file}")
+            
+            self.logger.info(f"Processing {len(files_to_process)} files ({len(psarc_files) - len(files_to_process)} skipped)")
+            
+            if files_to_process:
+                # Prepare arguments for parallel processing
+                process_args = [
+                    (psarc_file, output_dir, self.demucs_model, self.device, force)
+                    for psarc_file in files_to_process
+                ]
+                
+                # Use ProcessPoolExecutor for CPU-bound tasks
+                with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                    # Submit all tasks
+                    future_to_file = {
+                        executor.submit(process_single_psarc_worker, args): args[0] 
+                        for args in process_args
+                    }
+                    
+                    # Collect results as they complete
+                    for future in as_completed(future_to_file):
+                        psarc_file = future_to_file[future]
+                        try:
+                            result = future.result()
+                            if result:
+                                processed_files.append(result)
+                                self.logger.info(f"Successfully processed: {result}")
+                            else:
+                                self.logger.error(f"Failed to process: {psarc_file}")
+                        except Exception as e:
+                            self.logger.error(f"Exception processing {psarc_file}: {e}")
         
         else:
             raise ValueError(f"Input path does not exist: {input_path}")
         
         return processed_files
+
+
+def process_single_psarc_worker(args_tuple: Tuple[Path, Path, str, str, bool]) -> Optional[Path]:
+    """
+    Worker function for parallel processing of PSARC files.
+    
+    Args:
+        args_tuple: Tuple containing (psarc_path, output_dir, demucs_model, device, force)
+        
+    Returns:
+        Path to processed file or None if skipped/failed
+    """
+    psarc_path, output_dir, demucs_model, device, force = args_tuple
+    
+    try:
+        # Create a new processor instance for this worker
+        processor = RocksmithGuitarMute(demucs_model=demucs_model, device=device)
+        return processor.process_psarc_file(psarc_path, output_dir, force=force)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to process {psarc_path}: {e}")
+        return None
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -528,9 +619,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Process single file
   python rocksmith_guitar_mute.py sample/2minutes_p.psarc output/
+  
+  # Process directory with parallel processing (uses all CPU cores)
   python rocksmith_guitar_mute.py input_directory/ output/
+  
+  # Process with specific model and device
   python rocksmith_guitar_mute.py song.psarc output/ --model htdemucs --device cuda
+  
+  # Force reprocessing with 4 workers
+  python rocksmith_guitar_mute.py input_directory/ output/ --force --workers 4
+  
+  # Skip existing files (default behavior)
+  python rocksmith_guitar_mute.py input_directory/ output/ --workers 8
         """
     )
     
@@ -565,6 +667,19 @@ Examples:
         help="Enable verbose logging"
     )
     
+    parser.add_argument(
+        "--force", "-f",
+        action="store_true",
+        help="Process files even if output already exists"
+    )
+    
+    parser.add_argument(
+        "--workers", "-w",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: number of CPU cores)"
+    )
+    
     args = parser.parse_args()
     
     # Setup logging
@@ -585,7 +700,12 @@ Examples:
         
         # Process files
         logger.info("Starting RockSmith Guitar Mute processing...")
-        processed_files = processor.process_input(args.input_path, args.output_dir)
+        processed_files = processor.process_input(
+            args.input_path, 
+            args.output_dir, 
+            max_workers=args.workers,
+            force=args.force
+        )
         
         # Report results
         logger.info(f"Processing complete! Processed {len(processed_files)} files:")

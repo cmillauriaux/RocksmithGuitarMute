@@ -6,15 +6,31 @@ A tool for processing Rocksmith 2014 PSARC files to remove guitar tracks from au
 
 This project automates the process of unpacking Rocksmith 2014 PSARC files, extracting audio tracks, removing guitar parts using AI source separation, and repacking the modified files. This is useful for creating backing tracks or practicing with different instrumental arrangements.
 
-## Workflow
+## Features
 
-The processing pipeline consists of four main steps:
+### ✨ **New Performance Optimizations**
+- **Automatic Output Checking**: Skips files that have already been processed (unless `--force` is used)
+- **Parallel Processing**: Utilizes all CPU cores for maximum performance (one file per core)
+- **Configurable Workers**: Control the number of parallel workers with `--workers` option
+
+### Processing Pipeline
+
+The workflow consists of four main steps with parallel execution support:
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Unpack PSARC  │ -> │  Extract Audio  │ -> │ Remove Guitar   │ -> │  Repack PSARC   │
-│                 │    │                 │    │    (Demucs)     │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+                     ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+         File 1  ->  │   Unpack PSARC  │ -> │  Extract Audio  │ -> │ Remove Guitar   │ -> │  Repack PSARC   │
+                     └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+                     
+                     ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+         File 2  ->  │   Unpack PSARC  │ -> │  Extract Audio  │ -> │ Remove Guitar   │ -> │  Repack PSARC   │
+                     └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+                     
+                     ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+         File N  ->  │   Unpack PSARC  │ -> │  Extract Audio  │ -> │ Remove Guitar   │ -> │  Repack PSARC   │
+                     └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+                               ↑
+                    Parallel processing (up to number of CPU cores)
 ```
 
 ### 1. Unpack PSARC Files
