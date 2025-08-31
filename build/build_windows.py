@@ -191,10 +191,10 @@ demucs_datas = {demucs_data}
 
 # Données du projet
 project_datas = [
-    ('rs-utils', 'rs-utils'),
-    ('rsrtools', 'rsrtools'),
-    ('demucs', 'demucs'),
-    ('audio2wem_windows.py', '.'),
+    ('../rs-utils', 'rs-utils'),
+    ('../rsrtools', 'rsrtools'),
+    ('../demucs', 'demucs'),
+    ('../audio2wem_windows.py', '.'),
 ]
 
 # Modules cachés nécessaires
@@ -246,7 +246,7 @@ excludes = [
 
 a = Analysis(
     ['../gui/gui_main.py'],
-    pathex=['.'],
+    pathex=['..'],
     binaries=python_dlls,
     datas=project_datas + demucs_datas,
     hiddenimports=hidden_imports,
@@ -339,10 +339,10 @@ def build_executable(debug=False, onefile=False):
             '--onefile',
             '--windowed',  # Pas de console
             '--name', 'RockSmithGuitarMute',
-            '--add-data', 'rs-utils;rs-utils',
-            '--add-data', 'rsrtools;rsrtools', 
-            '--add-data', 'demucs;demucs',
-            '--add-data', 'audio2wem_windows.py;.',
+            '--add-data', '../rs-utils;rs-utils',
+            '--add-data', '../rsrtools;rsrtools', 
+            '--add-data', '../demucs;demucs',
+            '--add-data', '../audio2wem_windows.py;.',
             '--hidden-import', 'torch',
             '--hidden-import', 'torchaudio',
             '--hidden-import', 'demucs',
