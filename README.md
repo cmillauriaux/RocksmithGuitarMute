@@ -60,19 +60,10 @@ Reconstruct the PSARC file with the modified audio:
 
 ## Components
 
-### Rocksmith2014.NET
-Located in `./Rocksmith2014.NET/`
-
-A comprehensive .NET library suite for Rocksmith 2014 CDLC (Custom DLC) creation and manipulation:
-
-- **PSARC**: Opening and creating PSARC archives
-- **Audio**: Converting between wav, ogg, and wem files
-- **SNG**: Reading and writing SNG (Song) files
-- **XML**: Processing Rocksmith XML arrangements
-- **Conversion**: Converting between XML and SNG formats
+This project uses several external libraries as Git submodules:
 
 ### Demucs
-Installed via pip from PyPI
+Located in `./demucs/` (submodule from [adefossez/demucs](https://github.com/adefossez/demucs))
 
 Facebook Research's advanced music source separation model:
 
@@ -81,37 +72,58 @@ Facebook Research's advanced music source separation model:
 - **High quality**: State-of-the-art separation performance
 - **Flexible**: Supports various audio formats and processing options
 
+### RSRTools
+Located in `./rsrtools/` (submodule from [BuongiornoTexas/rsrtools](https://github.com/BuongiornoTexas/rsrtools))
+
+Tools for creating Rocksmith 2014 songlists and managing Rocksmith save files:
+
+- **PSARC handling**: Extract, list, pack, unpack, and verify PSARC files
+- **Profile management**: Manage Rocksmith save files and profiles
+- **Song lists**: Create and manage custom song lists
+
+### RS-Utils
+Located in `./rs-utils/` (submodule from [v8187/rs-utils](https://github.com/v8187/rs-utils))
+
+Utility methods and functions for JavaScript and TypeScript projects:
+
+- **String utilities**: Text formatting and manipulation
+- **Helper functions**: Common utility functions
+- **TypeScript support**: Full TypeScript definitions
+
 ## Requirements
 
 ### Dependencies
-- .NET 8.0 or later (for Rocksmith2014.NET)
-- Python 3.8+ (for Demucs)
+- Python 3.8+ (for Demucs and main application)
 - CUDA-compatible GPU (recommended for faster processing)
+- Git (for cloning with submodules)
 
 ### Python Dependencies
 ```bash
 pip install -r requirements.txt
 # Or manually:
-pip install torch torchaudio demucs
+pip install torch torchaudio demucs soundfile numpy
 ```
-
-### .NET Dependencies
-The Rocksmith2014.NET project includes all necessary NuGet packages defined in the project files.
 
 ## Installation
 
 ### Prerequisites
 
 1. **Python 3.8+** with pip
-2. **.NET 8.0 or later** (download from [dotnet.microsoft.com](https://dotnet.microsoft.com/download))
-3. **Git** (to clone the repository)
+2. **Git** (to clone the repository with submodules)
 
 ### Setup
 
-1. **Clone the repository**:
+1. **Clone the repository with submodules**:
+   ```bash
+   git clone --recursive <repository-url>
+   cd RockSmithGuitarMute
+   ```
+   
+   Or if you already cloned without `--recursive`:
    ```bash
    git clone <repository-url>
    cd RockSmithGuitarMute
+   git submodule update --init --recursive
    ```
 
 2. **Install Python dependencies**:
@@ -119,14 +131,14 @@ The Rocksmith2014.NET project includes all necessary NuGet packages defined in t
    pip install -r requirements.txt
    ```
 
-3. **Run setup script** to verify and prepare the environment:
+3. **Install the package** (optional, for development):
    ```bash
-   python setup.py
+   pip install -e .
    ```
 
-4. **Test with the sample file**:
+4. **Test the installation**:
    ```bash
-   python run_example.py
+   python tests/test_import.py
    ```
 
 ## Usage
