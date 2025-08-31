@@ -5,6 +5,25 @@ demucs
 soundfile>=0.12.0
 numpy>=1.21.0
 
+# Dependencies for rs-utils (Python scripts for Rocksmith 2014)
+construct>=2.5.1
+docopt>=0.6.1
+pycryptodome>=3.4.11
+six>=1.5.2
+
+# Dependencies for rsrtools (Rocksmith save files and songlists)
+simplejson>=3.19.2
+tomli-w>=1.0.0
+pydantic>=2.6.1
+
+# Additional demucs dependencies
+einops
+hydra-colorlog>=1.1
+hydra-core>=1.1
+julius>=0.2.3
+pyyaml
+tqdm
+
 # GUI dependencies
 # tkinter is included with Python, no need to install separately
 

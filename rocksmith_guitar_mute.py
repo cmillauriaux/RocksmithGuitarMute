@@ -202,7 +202,7 @@ class RocksmithGuitarMute:
         self.logger.info(f"Converting WEM to WAV: {wem_path.name}")
         
         # Use ww2ogg and revorb tools from rs-utils
-        rs_utils_bin = Path("bin")
+        rs_utils_bin = Path("rs-utils/bin")
         ww2ogg = rs_utils_bin / "ww2ogg.exe"
         revorb = rs_utils_bin / "revorb.exe"
         packed_codebooks = Path("rs-utils/share/packed_codebooks.bin")
