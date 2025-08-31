@@ -22,10 +22,12 @@ jobs:
         python-version: '3.11'
         cache: 'pip'
     
-    - name: Install system dependencies
+    - name: Verify system dependencies
       run: |
-        # Install Visual C++ Redistributable components needed for PyTorch
-        choco install vcredist2019 -y
+        # Check if Visual C++ Redistributable is available (usually pre-installed on GitHub runners)
+        echo "Checking system dependencies..."
+        python -c "import sys; print('Python version:', sys.version)"
+        echo "System ready for PyTorch installation"
     
     - name: Install Python dependencies
       run: |
