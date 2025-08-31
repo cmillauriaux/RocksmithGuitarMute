@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     
     steps:
     - name: Checkout code
@@ -91,7 +91,7 @@ jobs:
       shell: powershell
     
     - name: Upload Windows build artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: windows-executable
         path: release-windows/
@@ -128,7 +128,7 @@ jobs:
         echo "✅ Source distribution created"
     
     - name: Upload source artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: source-code
         path: release-source/
@@ -145,13 +145,13 @@ jobs:
         fetch-depth: 0
     
     - name: Download Windows build
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: windows-executable
         path: windows-build/
     
     - name: Download source code
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: source-code
         path: source-build/
