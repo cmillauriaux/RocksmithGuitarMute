@@ -49,6 +49,48 @@ jobs:
         cd build
         python build_windows.py --onefile --no-optimize
       shell: cmd
+      continue-on-error: true
+    
+    - name: Check build logs
+      run: |
+        Write-Host "=== Checking for build logs ==="
+        if (Test-Path "build/build.log") {
+          Write-Host "Build log found:"
+          Get-Content "build/build.log" -Tail 50
+        }
+        if (Test-Path "build/*.log") {
+          Write-Host "Other log files found:"
+          Get-ChildItem "build/*.log" | ForEach-Object {
+            Write-Host "--- $($_.Name) ---"
+            Get-Content $_.FullName -Tail 20
+          }
+        }
+        Write-Host "=== End of logs ==="
+      shell: powershell
+      continue-on-error: true
+    
+    - name: Debug build output
+      run: |
+        Write-Host "=== Build Output Debug ==="
+        Write-Host "Current directory: $(Get-Location)"
+        Write-Host ""
+        Write-Host "Contents of current directory:"
+        Get-ChildItem -Force | Format-Table Name, Length, LastWriteTime
+        Write-Host ""
+        if (Test-Path "dist") {
+          Write-Host "Contents of dist directory:"
+          Get-ChildItem "dist" -Force | Format-Table Name, Length, LastWriteTime
+        } else {
+          Write-Host "dist directory does not exist"
+        }
+        Write-Host ""
+        if (Test-Path "build") {
+          Write-Host "Contents of build directory:"
+          Get-ChildItem "build" -Force | Format-Table Name, Length, LastWriteTime
+        } else {
+          Write-Host "build directory does not exist"
+        }
+      shell: powershell
     
     - name: Verify build output
       run: |
@@ -57,7 +99,15 @@ jobs:
           $size = (Get-Item "dist/RockSmithGuitarMute.exe").Length / 1MB
           Write-Host "Size: $([math]::Round($size, 2)) MB"
         } else {
-          Write-Host "Executable not found"
+          Write-Host "Executable not found in expected location"
+          Write-Host "Searching for executable in all directories..."
+          $exeFiles = Get-ChildItem -Recurse -Name "*.exe" -ErrorAction SilentlyContinue
+          if ($exeFiles) {
+            Write-Host "Found .exe files:"
+            $exeFiles | ForEach-Object { Write-Host "  $_" }
+          } else {
+            Write-Host "No .exe files found anywhere"
+          }
           exit 1
         }
       shell: powershell
