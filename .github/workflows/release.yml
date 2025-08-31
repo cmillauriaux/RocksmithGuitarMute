@@ -21,6 +21,16 @@ jobs:
         fetch-depth: 0
         submodules: recursive
     
+    - name: Initialize and update submodules
+      run: |
+        git submodule update --init --recursive
+        echo "Verifying submodules:"
+        dir rsrtools
+        if (Test-Path "rsrtools/src") { dir rsrtools/src } else { echo "rsrtools/src not found" }
+        dir demucs | Select-Object -First 5
+        dir rs-utils | Select-Object -First 5
+      shell: powershell
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -41,6 +51,8 @@ jobs:
         pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
         pip install pyinstaller>=5.0.0
+        # Install rsrtools as editable package to ensure it's available
+        pip install -e rsrtools/
     
     - name: Verify dependencies
       run: |
@@ -48,6 +60,8 @@ jobs:
         python -c "import demucs; print('Demucs installed successfully')"
         python -c "import soundfile; print('SoundFile installed successfully')"
         python -c "import tkinter; print('Tkinter available')"
+        python -c "import rsrtools; print('rsrtools imported successfully')"
+        python -c "import rsrtools.files.welder; print('rsrtools.files.welder imported successfully')"
     
     - name: Build Windows executable
       run: |
