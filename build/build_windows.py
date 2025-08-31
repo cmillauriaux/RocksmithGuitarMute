@@ -14,12 +14,12 @@ import argparse
 
 def check_dependencies():
     """Vérifie que toutes les dépendances sont installées."""
-    print("🔍 Vérification des dépendances...")
+    print("Verification des dependances...")
     
     # Afficher l'environnement pour debug
-    print(f"📋 Environnement Python:")
+    print(f"Environnement Python:")
     print(f"  - Version: {sys.version}")
-    print(f"  - Exécutable: {sys.executable}")
+    print(f"  - Executable: {sys.executable}")
     
     # Packages avec leurs noms d'import alternatifs
     required_packages = [
@@ -39,17 +39,17 @@ def check_dependencies():
             module = __import__(import_name)
             version = getattr(module, '__version__', 'version inconnue')
             version_info[package_name] = version
-            print(f"  ✓ {package_name} ({version})")
+            print(f"  OK {package_name} ({version})")
         except ImportError:
             # Essayer avec le nom alternatif
             try:
                 module = __import__(package_name)
                 version = getattr(module, '__version__', 'version inconnue')
                 version_info[package_name] = version
-                print(f"  ✓ {package_name} ({version})")
+                print(f"  OK {package_name} ({version})")
             except ImportError:
                 missing_packages.append(package_name)
-                print(f"  ✗ {package_name} (manquant)")
+                print(f"  ERREUR {package_name} (manquant)")
     
     # Vérifications spéciales pour PyTorch
     if 'torch' in version_info:
@@ -57,30 +57,30 @@ def check_dependencies():
             import torch
             cuda_available = torch.cuda.is_available()
             cuda_count = torch.cuda.device_count() if cuda_available else 0
-            print(f"  📊 PyTorch CUDA: {'✓' if cuda_available else '✗'} ({cuda_count} GPU(s))")
+            print(f"  PyTorch CUDA: {'OK' if cuda_available else 'NON'} ({cuda_count} GPU(s))")
             
             # Détecter si on est dans un environnement CI
             is_ci = os.environ.get('GITHUB_ACTIONS') == 'true'
             if is_ci:
-                print(f"  🤖 Environnement CI détecté (GitHub Actions)")
+                print(f"  Environnement CI detecte (GitHub Actions)")
             else:
-                print(f"  🖥️  Environnement local détecté")
+                print(f"  Environnement local detecte")
                 
         except Exception as e:
-            print(f"  ⚠️  Erreur lors de la vérification PyTorch: {e}")
+            print(f"  ATTENTION Erreur lors de la verification PyTorch: {e}")
     
     if missing_packages:
-        print(f"\n❌ Packages manquants: {', '.join(missing_packages)}")
+        print(f"\nERREUR Packages manquants: {', '.join(missing_packages)}")
         print("Installez-les avec: pip install " + " ".join(missing_packages))
         return False
     
-    print("✅ Toutes les dépendances sont installées!")
+    print("OK Toutes les dependances sont installees!")
     return True
 
 
 def clean_build_dirs():
     """Nettoie les répertoires de build précédents."""
-    print("🧹 Nettoyage des builds précédents...")
+    print("Nettoyage des builds precedents...")
     
     dirs_to_clean = ['build', 'dist', '__pycache__']
     files_to_clean = ['*.spec']
@@ -88,12 +88,12 @@ def clean_build_dirs():
     for dir_name in dirs_to_clean:
         if Path(dir_name).exists():
             shutil.rmtree(dir_name)
-            print(f"  ✓ Supprimé: {dir_name}")
+            print(f"  Supprime: {dir_name}")
     
     # Nettoyer les fichiers .spec
     for spec_file in Path('.').glob('*.spec'):
         spec_file.unlink()
-        print(f"  ✓ Supprimé: {spec_file}")
+        print(f"  Supprime: {spec_file}")
 
 
 def get_torch_paths():
@@ -187,13 +187,13 @@ def get_demucs_data_files():
 
 def create_pyinstaller_spec(onefile=False, debug=False):
     """Crée le fichier .spec pour PyInstaller."""
-    print("📝 Création du fichier de configuration PyInstaller...")
+    print("Creation du fichier de configuration PyInstaller...")
     
     torch_paths = get_torch_paths()
     demucs_data = get_demucs_data_files()
     python_dlls = get_python_dll_paths()
     
-    print(f"📋 DLL Python détectées: {len(python_dlls)}")
+    print(f"DLL Python detectees: {len(python_dlls)}")
     for dll_path, dest in python_dlls[:5]:  # Afficher les 5 premières
         print(f"  - {Path(dll_path).name} -> {dest}")
     if len(python_dlls) > 5:
@@ -385,15 +385,15 @@ coll = COLLECT(
     with open('rocksmith_gui.spec', 'w', encoding='utf-8') as f:
         f.write(spec_content)
     
-    print("✅ Fichier rocksmith_gui.spec créé!")
+    print("OK Fichier rocksmith_gui.spec cree!")
 
 
 def build_executable(debug=False, onefile=False):
     """Compile l'exécutable avec PyInstaller."""
-    print("🔨 Compilation de l'exécutable...")
+    print("Compilation de l'executable...")
     
     if onefile:
-        print("📦 Mode onefile activé (peut résoudre les problèmes de DLL)")
+        print("Mode onefile active (peut resoudre les problemes de DLL)")
         # Pour onefile, utiliser directement PyInstaller sans .spec
         cmd = [
             sys.executable, '-m', 'PyInstaller',
@@ -468,10 +468,10 @@ def build_executable(debug=False, onefile=False):
     
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print("✅ Compilation réussie!")
+        print("OK Compilation reussie!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Erreur de compilation:")
+        print(f"ERREUR Erreur de compilation:")
         print(f"STDOUT: {e.stdout}")
         print(f"STDERR: {e.stderr}")
         return False
@@ -479,7 +479,7 @@ def build_executable(debug=False, onefile=False):
 
 def create_installer_script():
     """Crée un script d'installation simple."""
-    print("📦 Création du script d'installation...")
+    print("Creation du script d'installation...")
     
     installer_content = '''@echo off
 echo ========================================
@@ -510,7 +510,7 @@ set "SHORTCUT=%DESKTOP%\\RockSmith Guitar Mute.lnk"
 powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT%'); $Shortcut.TargetPath = '%INSTALL_DIR%\\RockSmithGuitarMute.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Save()"
 
 echo.
-echo ✅ Installation terminée!
+echo Installation terminee!
 echo.
 echo Le programme est installé dans: %INSTALL_DIR%
 echo Un raccourci a été créé sur le bureau.
@@ -521,12 +521,12 @@ pause
     with open('dist/install.bat', 'w', encoding='utf-8') as f:
         f.write(installer_content)
     
-    print("✅ Script d'installation créé: dist/install.bat")
+    print("OK Script d'installation cree: dist/install.bat")
 
 
 def create_readme():
     """Crée un fichier README pour la distribution."""
-    print("📄 Création du README de distribution...")
+    print("Creation du README de distribution...")
     
     readme_content = '''# RockSmith Guitar Mute - Version Standalone
 
@@ -593,16 +593,16 @@ Ce logiciel est distribué sous licence open source. Voir le fichier LICENSE pou
     with open('dist/README.txt', 'w', encoding='utf-8') as f:
         f.write(readme_content)
     
-    print("✅ README créé: dist/README.txt")
+    print("OK README cree: dist/README.txt")
 
 
 def optimize_distribution():
     """Optimise la distribution en supprimant les fichiers inutiles."""
-    print("🎯 Optimisation de la distribution...")
+    print("Optimisation de la distribution...")
     
     dist_dir = Path('dist/RockSmithGuitarMute')
     if not dist_dir.exists():
-        print("❌ Dossier de distribution non trouvé!")
+        print("ERREUR Dossier de distribution non trouve!")
         return
     
     # Fichiers et dossiers à supprimer pour réduire la taille
@@ -637,9 +637,9 @@ def optimize_distribution():
                     shutil.rmtree(item)
                     removed_size += size
             except Exception as e:
-                print(f"  ⚠ Impossible de supprimer {item}: {e}")
+                print(f"  ATTENTION Impossible de supprimer {item}: {e}")
     
-    print(f"✅ Optimisation terminée! {removed_size / (1024*1024):.1f} MB économisés")
+    print(f"OK Optimisation terminee! {removed_size / (1024*1024):.1f} MB economises")
 
 
 def main():
@@ -660,18 +660,18 @@ def main():
     clean_build_dirs()
     
     if args.clean_only:
-        print("✅ Nettoyage terminé!")
+        print("OK Nettoyage termine!")
         return
     
     # Mode optimisation
     if args.optimize:
-        print("🎯 Mode optimisation activé - réduction de la taille")
+        print("Mode optimisation active - reduction de la taille")
         try:
             import optimize_build
             optimize_build.main()
             return
         except ImportError:
-            print("❌ Script d'optimisation non trouvé, compilation normale...")
+            print("ERREUR Script d'optimisation non trouve, compilation normale...")
             # Continuer avec la compilation normale
     
     # Vérification des dépendances
@@ -683,7 +683,7 @@ def main():
     
     # Compilation
     if not build_executable(debug=args.debug, onefile=args.onefile):
-        print("❌ Échec de la compilation!")
+        print("ERREUR Echec de la compilation!")
         sys.exit(1)
     
     # Vérification du résultat
@@ -693,11 +693,11 @@ def main():
         exe_path = Path('dist/RockSmithGuitarMute/RockSmithGuitarMute.exe')
     
     if not exe_path.exists():
-        print("❌ Exécutable non trouvé après compilation!")
+        print("ERREUR Executable non trouve apres compilation!")
         print(f"Chemin attendu: {exe_path}")
         sys.exit(1)
     
-    print(f"✅ Exécutable créé: {exe_path}")
+    print(f"OK Executable cree: {exe_path}")
     print(f"   Taille: {exe_path.stat().st_size / (1024*1024):.1f} MB")
     
     # Optimisation
@@ -708,14 +708,14 @@ def main():
     create_installer_script()
     create_readme()
     
-    print("\n🎉 Compilation terminée avec succès!")
-    print(f"📁 Distribution disponible dans: {Path('dist').absolute()}")
-    print("\n📋 Fichiers créés:")
+    print("\nOK Compilation terminee avec succes!")
+    print(f"Distribution disponible dans: {Path('dist').absolute()}")
+    print("\nFichiers crees:")
     print("  - RockSmithGuitarMute.exe (application principale)")
     print("  - install.bat (script d'installation)")
     print("  - README.txt (documentation)")
     
-    print("\n💡 Pour distribuer:")
+    print("\nPour distribuer:")
     print("  1. Compressez le dossier 'dist' en ZIP")
     print("  2. Ou utilisez install.bat pour une installation système")
 
