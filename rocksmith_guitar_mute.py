@@ -55,7 +55,7 @@ except ImportError:
 class RocksmithGuitarMute:
     """Main class for processing Rocksmith PSARC files to remove guitar tracks."""
     
-    def __init__(self, demucs_model: str = "htdemucs", device: str = "auto"):
+    def __init__(self, demucs_model: str = "htdemucs_6s", device: str = "auto"):
         """
         Initialize the processor.
         
@@ -247,13 +247,14 @@ class RocksmithGuitarMute:
         # Clean up temporary OGG
         temp_ogg.unlink()
     
-    def remove_guitar_track(self, audio_path: Path, output_path: Path) -> None:
+    def remove_guitar_track(self, audio_path: Path, output_path: Path, save_guitar: bool = False) -> None:
         """
         Remove guitar track from audio using Demucs.
         
         Args:
             audio_path: Path to the input audio file
             output_path: Path for the output backing track
+            save_guitar: If True, also save the isolated guitar track
         """
         self.logger.info(f"Processing audio with Demucs: {audio_path.name}")
         
@@ -289,9 +290,14 @@ class RocksmithGuitarMute:
                 stems[stem_name] = audio
                 self.logger.debug(f"Loaded stem: {stem_name}")
             
-            # Combine all sources except 'other' (which typically contains guitar)
+            # For htdemucs_6s model, exclude the guitar stem specifically
             backing_stems = []
-            exclude_stems = ['other']  # 'other' typically contains guitar/lead instruments
+            if self.demucs_model == "htdemucs_6s":
+                exclude_stems = ['guitar']  # Specific guitar stem in 6-source model
+                self.logger.info("Using htdemucs_6s: excluding dedicated guitar stem")
+            else:
+                exclude_stems = ['other']  # 'other' typically contains guitar/lead instruments
+                self.logger.info("Using standard model: excluding 'other' stem")
             
             for stem_name, stem_audio in stems.items():
                 if stem_name not in exclude_stems:
@@ -304,8 +310,12 @@ class RocksmithGuitarMute:
             if backing_stems:
                 backing_track = torch.stack(backing_stems).sum(dim=0)
             else:
-                # Fallback: use drums + bass + vocals if available
-                fallback_stems = ['drums', 'bass', 'vocals']
+                # Fallback: use all stems except guitar
+                if self.demucs_model == "htdemucs_6s":
+                    fallback_stems = ['drums', 'bass', 'vocals', 'piano', 'other']
+                else:
+                    fallback_stems = ['drums', 'bass', 'vocals']
+                    
                 backing_track = None
                 for stem_name in fallback_stems:
                     if stem_name in stems:
@@ -320,8 +330,22 @@ class RocksmithGuitarMute:
             
             # Save the backing track
             torchaudio.save(str(output_path), backing_track, sr)
-            
             self.logger.info(f"Backing track saved: {output_path}")
+            
+            # Optionally save the isolated guitar track
+            if save_guitar:
+                guitar_track = None
+                if self.demucs_model == "htdemucs_6s" and 'guitar' in stems:
+                    guitar_track = stems['guitar']
+                elif 'other' in stems:
+                    guitar_track = stems['other']
+                
+                if guitar_track is not None:
+                    guitar_output_path = output_path.with_name(f"{output_path.stem}_guitar{output_path.suffix}")
+                    torchaudio.save(str(guitar_output_path), guitar_track, sr)
+                    self.logger.info(f"Guitar track saved: {guitar_output_path}")
+                else:
+                    self.logger.warning("No guitar track found to save")
             
         finally:
             # Clean up temporary directory
@@ -466,7 +490,7 @@ class RocksmithGuitarMute:
                         
                         # Remove guitar track
                         processed_wav = wav_file.with_name(f"{wav_file.stem}_processed.wav")
-                        self.remove_guitar_track(wav_file, processed_wav)
+                        self.remove_guitar_track(wav_file, processed_wav, save_guitar=False)
                         
                         # Convert back to WEM and replace original
                         self.convert_wav_to_wem(processed_wav, audio_file)
@@ -478,7 +502,7 @@ class RocksmithGuitarMute:
                     elif audio_file.suffix.lower() in ['.ogg', '.wav']:
                         # Process directly
                         processed_file = audio_file.with_name(f"{audio_file.stem}_processed{audio_file.suffix}")
-                        self.remove_guitar_track(audio_file, processed_file)
+                        self.remove_guitar_track(audio_file, processed_file, save_guitar=False)
                         
                         # Replace original with processed version
                         shutil.move(processed_file, audio_file)
@@ -650,8 +674,8 @@ Examples:
     
     parser.add_argument(
         "--model",
-        default="htdemucs",
-        help="Demucs model to use for source separation (default: htdemucs)"
+        default="htdemucs_6s",
+        help="Demucs model to use for source separation (default: htdemucs_6s)"
     )
     
     parser.add_argument(
