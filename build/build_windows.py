@@ -185,7 +185,7 @@ def get_demucs_data_files():
         return []
 
 
-def create_pyinstaller_spec(onefile=False):
+def create_pyinstaller_spec(onefile=False, debug=False):
     """Crée le fichier .spec pour PyInstaller."""
     print("📝 Création du fichier de configuration PyInstaller...")
     
@@ -353,11 +353,11 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name=app_name,
-    debug=False,
+    debug={str(debug).lower()},
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # Interface graphique, pas de console
+    console={str(debug).lower()},  # Console en mode debug
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -451,12 +451,14 @@ def build_executable(debug=False, onefile=False):
         cmd = [
             sys.executable, '-m', 'PyInstaller',
             '--clean',
-            '--noconfirm',
-            'rocksmith_gui.spec'
+            '--noconfirm'
         ]
-    
-    if debug:
-        cmd.extend(['--debug', 'all'])
+        
+        # Pour le mode debug avec .spec, on doit modifier le .spec lui-même
+        if debug:
+            cmd.extend(['--log-level', 'DEBUG'])
+        
+        cmd.append('rocksmith_gui.spec')
     
     print(f"Commande: {' '.join(cmd)}")
     
@@ -673,7 +675,7 @@ def main():
         sys.exit(1)
     
     # Création du fichier spec
-    create_pyinstaller_spec(onefile=args.onefile)
+    create_pyinstaller_spec(onefile=args.onefile, debug=args.debug)
     
     # Compilation
     if not build_executable(debug=args.debug, onefile=args.onefile):

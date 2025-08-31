@@ -75,7 +75,7 @@ jobs:
         set PYTHONIOENCODING=utf-8
         cd build
         echo "=== Starting Build ==="
-        python build_windows.py --debug
+        python build_windows.py
         echo "=== Build Completed ==="
       shell: cmd
     
