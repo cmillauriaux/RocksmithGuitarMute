@@ -228,9 +228,27 @@ hidden_imports = [
     'rsrtools.files.welder',
     'rsrtools.files.config',
     'rsrtools.files.exceptions',
+    # Imports cachés supplémentaires pour PyTorch
+    'torch.nn',
+    'torch.nn.functional',
+    'torch.optim',
+    'torch.utils',
+    'torch.utils.data',
+    'torchaudio.transforms',
+    'torchaudio.functional',
+    'torchaudio.models',
+    # Imports pour Demucs
+    'demucs.hdemucs',
+    'demucs.htdemucs',
+    'demucs.wdemucs',
+    'demucs.transformer',
+    'demucs.spec',
+    'demucs.states',
+    'demucs.utils',
+    'demucs.wav',
 ]
 
-# Exclusions pour réduire la taille
+# Exclusions pour réduire la taille (mais garder les dépendances essentielles)
 excludes = [
     'matplotlib',
     'IPython',
@@ -241,7 +259,8 @@ excludes = [
     'cv2',
     'PIL',
     'pytest',
-    'setuptools',
+    # Ne pas exclure setuptools car PyTorch en a besoin
+    # 'setuptools',
 ]
 
 a = Analysis(
@@ -354,6 +373,24 @@ def build_executable(debug=False, onefile=False):
             '--hidden-import', 'tkinter.filedialog',
             '--hidden-import', 'tkinter.messagebox',
             '--hidden-import', 'rsrtools.files.welder',
+            '--hidden-import', 'rsrtools.files.config',
+            '--hidden-import', 'rsrtools.files.exceptions',
+            '--hidden-import', 'torch.nn',
+            '--hidden-import', 'torch.nn.functional',
+            '--hidden-import', 'torch.optim',
+            '--hidden-import', 'torch.utils',
+            '--hidden-import', 'torch.utils.data',
+            '--hidden-import', 'torchaudio.transforms',
+            '--hidden-import', 'torchaudio.functional',
+            '--hidden-import', 'torchaudio.models',
+            '--hidden-import', 'demucs.hdemucs',
+            '--hidden-import', 'demucs.htdemucs',
+            '--hidden-import', 'demucs.wdemucs',
+            '--hidden-import', 'demucs.transformer',
+            '--hidden-import', 'demucs.spec',
+            '--hidden-import', 'demucs.states',
+            '--hidden-import', 'demucs.utils',
+            '--hidden-import', 'demucs.wav',
             '../gui/gui_main.py'
         ]
     else:

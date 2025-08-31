@@ -37,6 +37,8 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
+        # Install specific versions to match local environment
+        pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
         pip install pyinstaller>=5.0.0
     
@@ -111,6 +113,15 @@ jobs:
           Write-Host "Executable built successfully in build/dist/"
           $size = (Get-Item "build/dist/RockSmithGuitarMute.exe").Length / 1MB
           Write-Host "Size: $([math]::Round($size, 2)) MB"
+          
+          # Verify executable size (should be around 300+ MB for complete build)
+          if ($size -lt 200) {
+            Write-Host "WARNING: Executable size is suspiciously small ($([math]::Round($size, 2)) MB)"
+            Write-Host "Expected size: ~300+ MB. Build may be incomplete."
+            Write-Host "This could indicate missing PyTorch libraries or other dependencies."
+          } else {
+            Write-Host "Executable size looks good ($([math]::Round($size, 2)) MB)"
+          }
           
           # Move executable to root dist directory for consistency
           if (-not (Test-Path "dist")) {
