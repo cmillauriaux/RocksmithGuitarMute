@@ -127,18 +127,63 @@ def get_python_dll_paths():
     # Chemin de l'installation Python
     python_dir = Path(sys.executable).parent
     
+    # Debug: afficher les chemins Python
+    print(f"DEBUG: Python executable: {sys.executable}")
+    print(f"DEBUG: Python directory: {python_dir}")
+    print(f"DEBUG: Python version: {sys.version}")
+    
+    # Vérifier si on est dans un environnement CI
+    is_ci = os.environ.get('GITHUB_ACTIONS') == 'true'
+    if is_ci:
+        print("DEBUG: Running in GitHub Actions CI environment")
+    
     # DLL Python principale
     python_version = f"python{sys.version_info.major}{sys.version_info.minor}"
     python_dll = python_dir / f"{python_version}.dll"
     
     if python_dll.exists():
         python_dll_paths.append((str(python_dll), '.'))
+        print(f"DEBUG: Found main Python DLL: {python_dll}")
+    else:
+        print(f"DEBUG: Main Python DLL not found at: {python_dll}")
+        # Recherche alternative dans l'environnement CI
+        if is_ci:
+            # GitHub Actions peut avoir les DLL dans un autre répertoire
+            alt_locations = [
+                python_dir.parent / "DLLs" / f"{python_version}.dll",
+                Path(sys.base_prefix) / f"{python_version}.dll",
+                Path(sys.base_prefix) / "DLLs" / f"{python_version}.dll"
+            ]
+            for alt_dll in alt_locations:
+                if alt_dll.exists():
+                    python_dll_paths.append((str(alt_dll), '.'))
+                    print(f"DEBUG: Found alternative Python DLL: {alt_dll}")
+                    break
     
     # DLLs dans le dossier DLLs
     dlls_dir = python_dir / "DLLs"
     if dlls_dir.exists():
+        dll_count = 0
         for dll_file in dlls_dir.glob("*.dll"):
             python_dll_paths.append((str(dll_file), 'DLLs'))
+            dll_count += 1
+        print(f"DEBUG: Found {dll_count} DLLs in {dlls_dir}")
+    else:
+        print(f"DEBUG: DLLs directory not found at: {dlls_dir}")
+        # Recherche alternative pour les DLL
+        if is_ci:
+            alt_dlls_dirs = [
+                python_dir.parent / "DLLs",
+                Path(sys.base_prefix) / "DLLs"
+            ]
+            for alt_dir in alt_dlls_dirs:
+                if alt_dir.exists():
+                    dll_count = 0
+                    for dll_file in alt_dir.glob("*.dll"):
+                        python_dll_paths.append((str(dll_file), 'DLLs'))
+                        dll_count += 1
+                    print(f"DEBUG: Found {dll_count} DLLs in alternative location: {alt_dir}")
+                    break
     
     # Bibliothèques système importantes
     system_dlls = [
@@ -149,10 +194,21 @@ def get_python_dll_paths():
     
     # Chercher dans System32
     system32 = Path(os.environ.get('SYSTEMROOT', 'C:\\Windows')) / "System32"
+    system_dll_count = 0
     for dll_name in system_dlls:
         dll_path = system32 / dll_name
         if dll_path.exists():
             python_dll_paths.append((str(dll_path), '.'))
+            system_dll_count += 1
+    print(f"DEBUG: Found {system_dll_count}/{len(system_dlls)} system DLLs")
+    
+    # Vérification finale
+    total_dlls = len(python_dll_paths)
+    print(f"DEBUG: Total DLLs found: {total_dlls}")
+    
+    if total_dlls < 5:  # Minimum attendu
+        print("WARNING: Very few DLLs found - this may cause runtime errors!")
+        print("This could explain the 'Failed to load Python DLL' error.")
     
     return python_dll_paths
 
