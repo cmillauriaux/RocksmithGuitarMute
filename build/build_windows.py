@@ -370,9 +370,7 @@ def build_executable(debug=False, onefile=False):
             '--onefile',
             '--windowed',  # Pas de console
             '--name', 'RockSmithGuitarMute',
-            '--collect-submodules', 'torch',
-            '--collect-submodules', 'torchaudio',
-            '--collect-submodules', 'demucs',
+
             '--add-data', '../rs-utils;rs-utils',
             '--add-data', '../rsrtools/src/rsrtools;rsrtools', 
             '--add-data', '../demucs/demucs;demucs',
