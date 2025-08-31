@@ -193,7 +193,7 @@ demucs_datas = {demucs_data}
 project_datas = [
     ('../rs-utils', 'rs-utils'),
     ('../rsrtools/src/rsrtools', 'rsrtools'),
-    ('../demucs/demucs/remote', 'demucs/demucs/remote'),
+    ('../demucs/demucs', 'demucs/demucs'),
     ('../demucs/conf', 'demucs/conf'),
     ('../audio2wem_windows.py', '.'),
 ]
@@ -372,9 +372,10 @@ def build_executable(debug=False, onefile=False):
             '--name', 'RockSmithGuitarMute',
             '--collect-submodules', 'torch',
             '--collect-submodules', 'torchaudio',
+            '--collect-submodules', 'demucs',
             '--add-data', '../rs-utils;rs-utils',
             '--add-data', '../rsrtools/src/rsrtools;rsrtools', 
-            '--add-data', '../demucs/demucs/remote;demucs/demucs/remote',
+            '--add-data', '../demucs/demucs;demucs/demucs',
             '--add-data', '../demucs/conf;demucs/conf',
             '--add-data', '../audio2wem_windows.py;.',
             '--hidden-import', 'torch',
