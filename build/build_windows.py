@@ -353,11 +353,11 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name=app_name,
-    debug={str(debug).lower()},
+    debug={debug},
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console={str(debug).lower()},  # Console en mode debug
+    console={debug},  # Console en mode debug
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
