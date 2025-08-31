@@ -192,7 +192,7 @@ demucs_datas = {demucs_data}
 # Données du projet
 project_datas = [
     ('../rs-utils', 'rs-utils'),
-    ('../rsrtools', 'rsrtools'),
+    ('../rsrtools/src/rsrtools', 'rsrtools'),
     ('../demucs', 'demucs'),
     ('../audio2wem_windows.py', '.'),
 ]
@@ -359,7 +359,7 @@ def build_executable(debug=False, onefile=False):
             '--windowed',  # Pas de console
             '--name', 'RockSmithGuitarMute',
             '--add-data', '../rs-utils;rs-utils',
-            '--add-data', '../rsrtools;rsrtools', 
+            '--add-data', '../rsrtools/src/rsrtools;rsrtools', 
             '--add-data', '../demucs;demucs',
             '--add-data', '../audio2wem_windows.py;.',
             '--hidden-import', 'torch',
