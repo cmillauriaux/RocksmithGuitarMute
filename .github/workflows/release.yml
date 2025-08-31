@@ -5,6 +5,11 @@ on:
     branches: [ master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
 jobs:
   build-windows:
     runs-on: windows-2022
@@ -298,9 +303,22 @@ jobs:
         # Verify packages
         ls -lh *.zip
         echo "Release packages created"
+        
+        # Verify both ZIP files exist
+        if [ ! -f "RockSmithGuitarMute-windows.zip" ]; then
+          echo "ERROR: Windows ZIP package not found"
+          exit 1
+        fi
+        
+        if [ ! -f "RockSmithGuitarMute-source.zip" ]; then
+          echo "ERROR: Source ZIP package not found"
+          exit 1
+        fi
+        
+        echo "Both ZIP packages verified successfully"
     
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.version.outputs.version }}
         name: "RockSmith Guitar Mute ${{ steps.version.outputs.version }}"
@@ -310,8 +328,7 @@ jobs:
         files: |
           RockSmithGuitarMute-windows.zip
           RockSmithGuitarMute-source.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Update latest release info
       run: |
