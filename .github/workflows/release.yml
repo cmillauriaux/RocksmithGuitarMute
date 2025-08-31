@@ -3,471 +3,125 @@ name: Build and Release
 on:
   push:
     branches: [ master ]
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  packages: write
-  actions: read
 
 jobs:
   build-windows:
-    runs-on: windows-2022
+    runs-on: windows-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
         submodules: recursive
-    
-    - name: Initialize and update submodules
-      run: |
-        git submodule update --init --recursive
-        echo "Verifying submodules:"
-        dir rsrtools
-        if (Test-Path "rsrtools/src") { dir rsrtools/src } else { echo "rsrtools/src not found" }
-        dir demucs | Select-Object -First 5
-        dir rs-utils | Select-Object -First 5
-      shell: powershell
     
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.12'
+        python-version: '3.11'
         cache: 'pip'
     
-    - name: Verify system dependencies
+    - name: Install system dependencies
       run: |
-        # Check if Visual C++ Redistributable is available (usually pre-installed on GitHub runners)
-        echo "Checking system dependencies..."
-        python -c "import sys; print('Python version:', sys.version)"
-        echo "System ready for PyTorch installation"
+        # Install Visual C++ Redistributable
+        choco install vcredist2019 -y
     
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install dependencies from requirements.txt first
         pip install -r requirements.txt
-        # Install rsrtools as editable package to ensure it's available
-        echo "Installing rsrtools..."
-        pip install -e rsrtools/
-        # Verify rsrtools installation specifically
-        python -c "import rsrtools; print('rsrtools installed from:', rsrtools.__file__)"
-        python -c "import rsrtools.files.welder; print('rsrtools.files.welder imported successfully')"
-        # Verify PyTorch installation
-        python -c "import torch; print('PyTorch version installed:', torch.__version__)"
+        pip install PyInstaller
     
     - name: Verify dependencies
       run: |
-        echo "=== Dependency Verification ==="
-        python -c "import torch; print('PyTorch version:', torch.__version__); print('CUDA available:', torch.cuda.is_available())"
-        python -c "import torchaudio; print('TorchAudio version:', torchaudio.__version__)"
-        python -c "import demucs; print('Demucs installed successfully')"
-        python -c "import soundfile; print('SoundFile installed successfully')"
-        python -c "import tkinter; print('Tkinter available')"
-        python -c "import rsrtools; print('rsrtools imported successfully')"
-        python -c "import rsrtools.files.welder; print('rsrtools.files.welder imported successfully')"
-        echo "=== Environment Info ==="
-        python -c "import sys; print('Python executable:', sys.executable)"
-        python -c "import platform; print('Platform:', platform.platform())"
-        pip list | findstr /i "torch demucs soundfile pyinstaller"
+        python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
+        python -c "import torchaudio; print(f'TorchAudio version: {torchaudio.__version__}')"
+        python -c "import demucs; print(f'Demucs version: {demucs.__version__}')"
+        python -c "import soundfile; print(f'SoundFile version: {soundfile.__version__}')"
+        python -c "import numpy; print(f'NumPy version: {numpy.__version__}')"
     
-    - name: Build Windows executable
+    - name: Clean build directories
       run: |
         cd build
-        echo "=== Starting Build ==="
-        python build_windows.py
-        echo "=== Build Completed ==="
-      shell: cmd
+        python build_windows.py --clean-only
     
-    - name: Check build logs and status
+    - name: Build executable
       run: |
-        Write-Host "=== Build Status Check ==="
-        
-        # Check if build completed successfully by looking for expected outputs
-        $buildSuccess = $false
-        
-        if (Test-Path "build/dist") {
-          Write-Host "✅ build/dist directory exists"
-          $buildSuccess = $true
-        } else {
-          Write-Host "❌ build/dist directory missing"
-        }
-        
-        # Look for any log files
-        Write-Host ""
-        Write-Host "=== Checking for build logs ==="
-        $logFiles = Get-ChildItem "build" -Filter "*.log" -ErrorAction SilentlyContinue
-        if ($logFiles) {
-          foreach ($logFile in $logFiles) {
-            Write-Host "--- $($logFile.Name) ---"
-            Get-Content $logFile.FullName -Tail 30
-            Write-Host ""
-          }
-        } else {
-          Write-Host "No log files found"
-        }
-        
-        # Check for PyInstaller spec files
-        $specFiles = Get-ChildItem "build" -Filter "*.spec" -ErrorAction SilentlyContinue
-        if ($specFiles) {
-          Write-Host "PyInstaller spec files found:"
-          $specFiles | ForEach-Object { Write-Host "  $($_.Name)" }
-        }
-        
-        Write-Host "=== End of build status check ==="
-      shell: powershell
-      if: always()
-    
-    - name: Debug build output
-      run: |
-        Write-Host "=== Build Output Debug ==="
-        Write-Host "Current directory: $(Get-Location)"
-        Write-Host ""
-        Write-Host "Contents of current directory:"
-        Get-ChildItem -Force | Format-Table Name, Length, LastWriteTime
-        Write-Host ""
-        if (Test-Path "dist") {
-          Write-Host "Contents of dist directory:"
-          Get-ChildItem "dist" -Force | Format-Table Name, Length, LastWriteTime
-        } else {
-          Write-Host "dist directory does not exist"
-        }
-        Write-Host ""
-        if (Test-Path "build") {
-          Write-Host "Contents of build directory:"
-          Get-ChildItem "build" -Force | Format-Table Name, Length, LastWriteTime
-          Write-Host ""
-          if (Test-Path "build/dist") {
-            Write-Host "Contents of build/dist directory:"
-            Get-ChildItem "build/dist" -Force | Format-Table Name, Length, LastWriteTime
-          } else {
-            Write-Host "build/dist directory does not exist"
-          }
-        } else {
-          Write-Host "build directory does not exist"
-        }
-      shell: powershell
+        cd build
+        python build_windows.py --onefile
+      env:
+        GITHUB_ACTIONS: 'true'
     
     - name: Verify build output
       run: |
-        Write-Host "=== Searching for built executable ==="
-        
-        # PyInstaller creates in build/dist/ (relative to build directory)
-        # Check both onefile and onedir locations
-        $exePaths = @(
-          "build/dist/RockSmithGuitarMute.exe",
-          "build/dist/RockSmithGuitarMute/RockSmithGuitarMute.exe"
-        )
-        
-        $foundExe = $null
-        foreach ($exePath in $exePaths) {
-          if (Test-Path $exePath) {
-            $foundExe = $exePath
-            Write-Host "SUCCESS: Executable found at $exePath"
-            break
-          }
-        }
-        
-        if ($foundExe) {
-          $size = (Get-Item $foundExe).Length / 1MB
-          $sizeRounded = [math]::Round($size, 2)
-          Write-Host "Size: $sizeRounded MB"
-          
-          # Verify executable size and provide detailed diagnostics
-          Write-Host "=== SIZE ANALYSIS ==="
-          if ($size -lt 30) {
-            Write-Host "ERROR: Executable size is too small ($sizeRounded MB)"
-            Write-Host "Expected size: ~35+ MB for executable, ~300+ MB total for onedir"
-            Write-Host "This indicates a build failure."
-            exit 1
-          } else {
-            Write-Host "SUCCESS: Executable size looks good ($sizeRounded MB)"
-          }
-          
-          # Create root dist directory and copy executable
-          if (-not (Test-Path "dist")) {
-            New-Item -ItemType Directory -Path "dist"
-          }
-          
-          # Analyze what's actually in the build directory
-          $sourceDir = Split-Path $foundExe -Parent
-          Write-Host "=== BUILD CONTENT ANALYSIS ==="
-          Write-Host "Build directory: $sourceDir"
-          if (Test-Path $sourceDir) {
-            $totalSize = (Get-ChildItem $sourceDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
-            $totalSizeRounded = [math]::Round($totalSize, 2)
-            Write-Host "Total directory size: $totalSizeRounded MB"
-            
-            Write-Host "Top-level contents:"
-            Get-ChildItem $sourceDir | Sort-Object Length -Descending | Select-Object -First 20 | ForEach-Object {
-              $itemSize = if ($_.PSIsContainer) { 
-                (Get-ChildItem $_.FullName -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB 
-              } else { 
-                $_.Length / 1MB 
-              }
-              $itemSizeRounded = [math]::Round($itemSize, 2)
-              Write-Host "  $($_.Name): $itemSizeRounded MB"
-            }
-            
-            # Look for PyTorch specifically
-            $torchFiles = Get-ChildItem $sourceDir -Recurse -Name "*torch*" -ErrorAction SilentlyContinue
-            if ($torchFiles) {
-              Write-Host "PyTorch files found: $($torchFiles.Count)"
-              $torchFiles | Select-Object -First 10 | ForEach-Object { Write-Host "  $_" }
-            } else {
-              Write-Host "ERROR: No PyTorch files found in build!"
-            }
-          }
-          
-          if ($foundExe -like "*RockSmithGuitarMute.exe") {
-            # onefile mode - copy directly  
-            Copy-Item $foundExe "dist/"
-            Write-Host "Executable copied to dist/"
-          } else {
-            # onedir mode - copy entire directory
-            Copy-Item $sourceDir "dist/" -Recurse -Force
-            Write-Host "Executable directory copied to dist/"
-          }
+        if (Test-Path "build/dist/RockSmithGuitarMute.exe") {
+          Write-Host "Build successful - executable found"
+          $size = (Get-Item "build/dist/RockSmithGuitarMute.exe").Length / 1MB
+          Write-Host "Executable size: $([math]::Round($size, 1)) MB"
         } else {
-          Write-Host "ERROR: Executable not found in expected locations"
-          
-          # Debug information
-          Write-Host ""
-          Write-Host "=== Debug Information ==="
-          Write-Host "Current directory: $(Get-Location)"
-          Write-Host ""
-          
-          Write-Host "Contents of build directory:"
-          if (Test-Path "build") {
-            Get-ChildItem "build" -Force | Format-Table Name, Length, LastWriteTime -AutoSize
-          } else {
-            Write-Host "build directory does not exist"
-          }
-          
-          Write-Host ""
-          Write-Host "Contents of build/dist directory:"
+          Write-Host "Build failed - executable not found"
+          Write-Host "Contents of build/dist/:"
           if (Test-Path "build/dist") {
-            Get-ChildItem "build/dist" -Force -Recurse | Format-Table Name, FullName, Length, LastWriteTime -AutoSize
-          } else {
-            Write-Host "build/dist directory does not exist"
+            Get-ChildItem -Recurse "build/dist" | ForEach-Object { Write-Host "  $($_.FullName)" }
           }
-          
-          Write-Host ""
-          Write-Host "Searching for ALL .exe files recursively..."
-          $allExeFiles = Get-ChildItem -Recurse -Name "*.exe" -ErrorAction SilentlyContinue
-          if ($allExeFiles) {
-            Write-Host "Found .exe files:"
-            $allExeFiles | ForEach-Object { 
-              $fullPath = Get-ChildItem -Recurse -Name $_ | Select-Object -First 1
-              $fileSize = (Get-Item $fullPath).Length / 1MB
-              $fileSizeRounded = [math]::Round($fileSize, 2)
-              Write-Host "  $_ ($fileSizeRounded MB)"
-            }
-          } else {
-            Write-Host "No .exe files found anywhere"
-          }
-          
-          Write-Host ""
-          Write-Host "Build may have failed. Check build logs above."
           exit 1
         }
-      shell: powershell
     
-    - name: Create Windows distribution package
+    - name: Create release archive
       run: |
-        # Create distribution directory
-        New-Item -ItemType Directory -Force -Path "release-windows"
-        
-        # Copy executable
-        Copy-Item "dist/RockSmithGuitarMute.exe" "release-windows/"
-        
-        # Copy additional files if they exist
-        if (Test-Path "dist/install.bat") { Copy-Item "dist/install.bat" "release-windows/" }
-        if (Test-Path "dist/README.txt") { Copy-Item "dist/README.txt" "release-windows/" }
-        
-        # Copy essential project files
-        Copy-Item "README.md" "release-windows/"
-        Copy-Item "CONTRIBUTING.md" "release-windows/" -ErrorAction SilentlyContinue
-        
-        # Create a simple launcher script
-        @"
-        @echo off
-        echo Starting RockSmith Guitar Mute...
-        echo.
-        RockSmithGuitarMute.exe
-        if errorlevel 1 (
-            echo.
-            echo An error occurred. Press any key to exit.
-            pause >nul
-        )
-        "@ | Out-File -FilePath "release-windows/launch.bat" -Encoding ASCII
-        
-        Write-Host "Windows distribution package created"
-      shell: powershell
+        cd build/dist
+        # Create a zip file with all distribution files
+        Compress-Archive -Path * -DestinationPath "../../RockSmithGuitarMute-Windows.zip"
+        cd ../..
+        Write-Host "Archive created: RockSmithGuitarMute-Windows.zip"
+        $archiveSize = (Get-Item "RockSmithGuitarMute-Windows.zip").Length / 1MB
+        Write-Host "Archive size: $([math]::Round($archiveSize, 1)) MB"
     
-    - name: Upload Windows build artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-executable
-        path: release-windows/
-        retention-days: 30
-
-  create-source-package:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        submodules: recursive
-    
-    - name: Create source distribution
+    - name: Generate release tag
+      id: tag
       run: |
-        # Create source package directory
-        mkdir -p release-source
-        
-        # Copy all source files except build artifacts and cache
-        rsync -av --exclude='.git' \
-                  --exclude='__pycache__' \
-                  --exclude='*.pyc' \
-                  --exclude='build/' \
-                  --exclude='dist/' \
-                  --exclude='*.egg-info' \
-                  --exclude='output/' \
-                  --exclude='test_output*/' \
-                  --exclude='.pytest_cache' \
-                  --exclude='*.log' \
-                  . release-source/
-        
-        echo "Source distribution created"
-    
-    - name: Upload source artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: source-code
-        path: release-source/
-        retention-days: 30
-
-  create-release:
-    needs: [build-windows, create-source-package]
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: Download Windows build
-      uses: actions/download-artifact@v4
-      with:
-        name: windows-executable
-        path: windows-build/
-    
-    - name: Download source code
-      uses: actions/download-artifact@v4
-      with:
-        name: source-code
-        path: source-build/
-    
-    - name: Generate version and release info
-      id: version
-      run: |
-        # Generate version based on date and commit
-        VERSION="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        
-        # Generate release notes
-        cat > release_notes.md << 'EOF'
-        ## 🎸 RockSmith Guitar Mute Release
-        
-        ### What's New
-        - Automatic build from latest master branch
-        - AI-powered guitar track removal using Demucs
-        - Support for Rocksmith 2014 PSARC files
-        - Graphical user interface for easy operation
-        
-        ### 📦 Downloads
-        - **Windows Executable**: `RockSmithGuitarMute-windows.zip` - Ready-to-run application for Windows
-        - **Source Code**: `RockSmithGuitarMute-source.zip` - Complete source code for all platforms
-        
-        ### 🖥️ System Requirements (Windows)
-        - Windows 10/11 (64-bit)
-        - 8 GB RAM minimum (16 GB recommended)
-        - 2 GB free disk space
-        - Multi-core processor recommended
-        - NVIDIA GPU with CUDA support (optional, for acceleration)
-        
-        ### 🚀 Quick Start
-        1. Download `RockSmithGuitarMute-windows.zip`
-        2. Extract to a folder of your choice
-        3. Run `RockSmithGuitarMute.exe`
-        4. Select your PSARC files and output directory
-        5. Click "Start Processing"
-        
-        ### 🔧 Advanced Usage
-        For developers or users who want to run from source:
-        1. Download `RockSmithGuitarMute-source.zip`
-        2. Install Python 3.8+ and dependencies: `pip install -r requirements.txt`
-        3. Run: `python gui/gui_main.py`
-        
-        ### 📝 Notes
-        - First run may take longer as AI models are downloaded
-        - GPU acceleration requires NVIDIA GPU with CUDA support
-        - Processing time varies based on song length and hardware
-        
-        Built from commit: `${{ github.sha }}`
-        EOF
-        
-        echo "Generated version: $VERSION"
-    
-    - name: Create ZIP packages
-      run: |
-        # Create Windows ZIP
-        cd windows-build
-        zip -r ../RockSmithGuitarMute-windows.zip .
-        cd ..
-        
-        # Create Source ZIP  
-        cd source-build
-        zip -r ../RockSmithGuitarMute-source.zip .
-        cd ..
-        
-        # Verify packages
-        ls -lh *.zip
-        echo "Release packages created"
-        
-        # Verify both ZIP files exist
-        if [ ! -f "RockSmithGuitarMute-windows.zip" ]; then
-          echo "ERROR: Windows ZIP package not found"
-          exit 1
-        fi
-        
-        if [ ! -f "RockSmithGuitarMute-source.zip" ]; then
-          echo "ERROR: Source ZIP package not found"
-          exit 1
-        fi
-        
-        echo "Both ZIP packages verified successfully"
+        $timestamp = Get-Date -Format "yyyy-MM-dd-HHmm"
+        $shortSha = "${{ github.sha }}".Substring(0, 7)
+        $tag = "v$timestamp-$shortSha"
+        echo "tag=$tag" >> $env:GITHUB_OUTPUT
+        echo "Generated tag: $tag"
     
     - name: Create Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ steps.version.outputs.version }}
-        name: "RockSmith Guitar Mute ${{ steps.version.outputs.version }}"
-        body_path: release_notes.md
+        tag_name: ${{ steps.tag.outputs.tag }}
+        name: "RockSmith Guitar Mute ${{ steps.tag.outputs.tag }}"
+        body: |
+          Automatic release from commit ${{ github.sha }}
+          
+          ## Changes
+          - Built from latest master branch
+          - Commit: ${{ github.sha }}
+          - Build date: ${{ github.run_started_at }}
+          
+          ## Installation
+          1. Download `RockSmithGuitarMute-Windows.zip`
+          2. Extract the archive
+          3. Run `install.bat` as administrator for system installation
+          4. Or run `RockSmithGuitarMute.exe` directly
+          
+          ## System Requirements
+          - Windows 10/11 (64-bit)
+          - 8 GB RAM minimum (16 GB recommended)
+          - 2 GB free disk space
+          - Multi-core processor recommended
+          - NVIDIA GPU with CUDA support (optional, for acceleration)
+        files: |
+          RockSmithGuitarMute-Windows.zip
         draft: false
         prerelease: false
-        files: |
-          RockSmithGuitarMute-windows.zip
-          RockSmithGuitarMute-source.zip
-        token: ${{ secrets.GITHUB_TOKEN }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
-    - name: Update latest release info
-      run: |
-        echo "Release ${{ steps.version.outputs.version }} created successfully!"
-        echo "Windows executable and source code are now available for download."
-        echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: RockSmithGuitarMute-Windows
+        path: |
+          build/dist/
+          RockSmithGuitarMute-Windows.zip
+        retention-days: 30

@@ -686,15 +686,24 @@ def main():
         print("ERREUR Echec de la compilation!")
         sys.exit(1)
     
-    # Vérification du résultat
+    # Vérification du résultat (Linux n'a pas d'extension .exe)
+    is_ci = os.environ.get('GITHUB_ACTIONS') == 'true'
+    exe_extension = '' if is_ci else '.exe'
+    
     if args.onefile:
-        exe_path = Path('dist/RockSmithGuitarMute.exe')
+        exe_path = Path(f'dist/RockSmithGuitarMute{exe_extension}')
     else:
-        exe_path = Path('dist/RockSmithGuitarMute/RockSmithGuitarMute.exe')
+        exe_path = Path(f'dist/RockSmithGuitarMute/RockSmithGuitarMute{exe_extension}')
     
     if not exe_path.exists():
         print("ERREUR Executable non trouve apres compilation!")
         print(f"Chemin attendu: {exe_path}")
+        
+        # Debug: lister ce qui a été créé
+        print("Contenu de dist/:")
+        if Path('dist').exists():
+            for item in Path('dist').rglob('*'):
+                print(f"  {item}")
         sys.exit(1)
     
     print(f"OK Executable cree: {exe_path}")
