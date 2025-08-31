@@ -22,17 +22,17 @@ jobs:
     
     - name: Install system dependencies
       run: |
-        # Install Visual C++ Redistributable (alternative method if chocolatey fails)
-        try {
-          choco install vcredist2022 -y
-        } catch {
-          Write-Host "Chocolatey installation failed, trying direct download..."
-          $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-          $output = "$env:TEMP\vc_redist.x64.exe"
-          Invoke-WebRequest -Uri $url -OutFile $output
-          Start-Process -FilePath $output -ArgumentList "/quiet" -Wait
-          Remove-Item $output
-        }
+        # Install Visual C++ Redistributable - direct download method
+        Write-Host "Installing Visual C++ Redistributable..."
+        $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+        $output = "$env:TEMP\vc_redist.x64.exe"
+        Write-Host "Downloading from: $url"
+        Invoke-WebRequest -Uri $url -OutFile $output
+        Write-Host "Installing Visual C++ Redistributable..."
+        Start-Process -FilePath $output -ArgumentList "/quiet" -Wait
+        Write-Host "Cleaning up..."
+        Remove-Item $output
+        Write-Host "Visual C++ Redistributable installation completed."
     
     - name: Install Python dependencies
       run: |
