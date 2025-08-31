@@ -129,10 +129,11 @@ def build_optimized_onefile():
         '--name', 'RockSmithGuitarMute_Optimized',
         
         # Données nécessaires
-        '--add-data', 'rs-utils;rs-utils',
-        '--add-data', 'rsrtools;rsrtools', 
-        '--add-data', 'demucs;demucs',
-        '--add-data', 'audio2wem_windows.py;.',
+        '--add-data', '../rs-utils;rs-utils',
+        '--add-data', '../rsrtools/src/rsrtools;rsrtools', 
+        '--add-data', '../demucs/demucs;demucs',
+        '--add-data', '../demucs/conf;demucs/conf',
+        '--add-data', '../audio2wem_windows.py;.',
         
         # Optimisations UPX
         '--upx-dir', 'upx',  # Si UPX est disponible
@@ -151,7 +152,7 @@ def build_optimized_onefile():
         cmd.extend(['--hidden-import', hidden])
     
     # Fichier source
-    cmd.append('gui_main.py')
+    cmd.append('../gui/gui_main.py')
     
     print(f"\nCommande de compilation:")
     print(" ".join(cmd[:10]) + " ...")  # Afficher le début
