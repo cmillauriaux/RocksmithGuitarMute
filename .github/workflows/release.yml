@@ -1,0 +1,244 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install system dependencies
+      run: |
+        # Install Visual C++ Redistributable components needed for PyTorch
+        choco install vcredist2019 -y
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller>=5.0.0
+    
+    - name: Verify dependencies
+      run: |
+        python -c "import torch; print('PyTorch version:', torch.__version__)"
+        python -c "import demucs; print('Demucs installed successfully')"
+        python -c "import soundfile; print('SoundFile installed successfully')"
+        python -c "import tkinter; print('Tkinter available')"
+    
+    - name: Build Windows executable
+      run: |
+        cd build
+        python build_github_actions.py
+      shell: cmd
+    
+    - name: Verify build output
+      run: |
+        if (Test-Path "dist/RockSmithGuitarMute.exe") {
+          Write-Host "✅ Executable built successfully"
+          $size = (Get-Item "dist/RockSmithGuitarMute.exe").Length / 1MB
+          Write-Host "📏 Size: $([math]::Round($size, 2)) MB"
+        } else {
+          Write-Host "❌ Executable not found"
+          exit 1
+        }
+      shell: powershell
+    
+    - name: Create Windows distribution package
+      run: |
+        # Create distribution directory
+        New-Item -ItemType Directory -Force -Path "release-windows"
+        
+        # Copy executable
+        Copy-Item "dist/RockSmithGuitarMute.exe" "release-windows/"
+        
+        # Copy additional files if they exist
+        if (Test-Path "dist/install.bat") { Copy-Item "dist/install.bat" "release-windows/" }
+        if (Test-Path "dist/README.txt") { Copy-Item "dist/README.txt" "release-windows/" }
+        
+        # Copy essential project files
+        Copy-Item "README.md" "release-windows/"
+        Copy-Item "CONTRIBUTING.md" "release-windows/" -ErrorAction SilentlyContinue
+        
+        # Create a simple launcher script
+        @"
+        @echo off
+        echo Starting RockSmith Guitar Mute...
+        echo.
+        RockSmithGuitarMute.exe
+        if errorlevel 1 (
+            echo.
+            echo An error occurred. Press any key to exit.
+            pause >nul
+        )
+        "@ | Out-File -FilePath "release-windows/launch.bat" -Encoding ASCII
+        
+        Write-Host "✅ Windows distribution package created"
+      shell: powershell
+    
+    - name: Upload Windows build artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-executable
+        path: release-windows/
+        retention-days: 30
+
+  create-source-package:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    
+    - name: Create source distribution
+      run: |
+        # Create source package directory
+        mkdir -p release-source
+        
+        # Copy all source files except build artifacts and cache
+        rsync -av --exclude='.git' \
+                  --exclude='__pycache__' \
+                  --exclude='*.pyc' \
+                  --exclude='build/' \
+                  --exclude='dist/' \
+                  --exclude='*.egg-info' \
+                  --exclude='output/' \
+                  --exclude='test_output*/' \
+                  --exclude='.pytest_cache' \
+                  --exclude='*.log' \
+                  . release-source/
+        
+        echo "✅ Source distribution created"
+    
+    - name: Upload source artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: source-code
+        path: release-source/
+        retention-days: 30
+
+  create-release:
+    needs: [build-windows, create-source-package]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Download Windows build
+      uses: actions/download-artifact@v3
+      with:
+        name: windows-executable
+        path: windows-build/
+    
+    - name: Download source code
+      uses: actions/download-artifact@v3
+      with:
+        name: source-code
+        path: source-build/
+    
+    - name: Generate version and release info
+      id: version
+      run: |
+        # Generate version based on date and commit
+        VERSION="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        
+        # Generate release notes
+        cat > release_notes.md << 'EOF'
+        ## 🎸 RockSmith Guitar Mute Release
+        
+        ### What's New
+        - Automatic build from latest master branch
+        - AI-powered guitar track removal using Demucs
+        - Support for Rocksmith 2014 PSARC files
+        - Graphical user interface for easy operation
+        
+        ### 📦 Downloads
+        - **Windows Executable**: `RockSmithGuitarMute-windows.zip` - Ready-to-run application for Windows
+        - **Source Code**: `RockSmithGuitarMute-source.zip` - Complete source code for all platforms
+        
+        ### 🖥️ System Requirements (Windows)
+        - Windows 10/11 (64-bit)
+        - 8 GB RAM minimum (16 GB recommended)
+        - 2 GB free disk space
+        - Multi-core processor recommended
+        - NVIDIA GPU with CUDA support (optional, for acceleration)
+        
+        ### 🚀 Quick Start
+        1. Download `RockSmithGuitarMute-windows.zip`
+        2. Extract to a folder of your choice
+        3. Run `RockSmithGuitarMute.exe`
+        4. Select your PSARC files and output directory
+        5. Click "Start Processing"
+        
+        ### 🔧 Advanced Usage
+        For developers or users who want to run from source:
+        1. Download `RockSmithGuitarMute-source.zip`
+        2. Install Python 3.8+ and dependencies: `pip install -r requirements.txt`
+        3. Run: `python gui/gui_main.py`
+        
+        ### 📝 Notes
+        - First run may take longer as AI models are downloaded
+        - GPU acceleration requires NVIDIA GPU with CUDA support
+        - Processing time varies based on song length and hardware
+        
+        Built from commit: `${{ github.sha }}`
+        EOF
+        
+        echo "Generated version: $VERSION"
+    
+    - name: Create ZIP packages
+      run: |
+        # Create Windows ZIP
+        cd windows-build
+        zip -r ../RockSmithGuitarMute-windows.zip .
+        cd ..
+        
+        # Create Source ZIP  
+        cd source-build
+        zip -r ../RockSmithGuitarMute-source.zip .
+        cd ..
+        
+        # Verify packages
+        ls -lh *.zip
+        echo "✅ Release packages created"
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: "RockSmith Guitar Mute ${{ steps.version.outputs.version }}"
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        files: |
+          RockSmithGuitarMute-windows.zip
+          RockSmithGuitarMute-source.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Update latest release info
+      run: |
+        echo "🎉 Release ${{ steps.version.outputs.version }} created successfully!"
+        echo "📦 Windows executable and source code are now available for download."
+        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
