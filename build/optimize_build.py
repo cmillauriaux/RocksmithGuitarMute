@@ -113,14 +113,14 @@ def get_optimized_hidden_imports():
 
 def build_optimized_onefile():
     """Compile un exécutable onefile optimisé."""
-    print("🎯 Compilation optimisée pour réduire la taille...")
-    print("✅ Support CUDA conservé")
+    print("Compilation optimisee pour reduire la taille...")
+    print("Support CUDA conserve")
     
     excludes = get_optimized_excludes()
     hidden_imports = get_optimized_hidden_imports()
     
-    print(f"📦 Exclusion de {len(excludes)} modules inutiles")
-    print(f"🔗 Inclusion de {len(hidden_imports)} imports essentiels")
+    print(f"Exclusion de {len(excludes)} modules inutiles")
+    print(f"Inclusion de {len(hidden_imports)} imports essentiels")
     
     # Construire la commande PyInstaller
     cmd = [
@@ -153,27 +153,27 @@ def build_optimized_onefile():
     # Fichier source
     cmd.append('gui_main.py')
     
-    print(f"\n🔨 Commande de compilation:")
+    print(f"\nCommande de compilation:")
     print(" ".join(cmd[:10]) + " ...")  # Afficher le début
     
     try:
-        print("\n⏳ Compilation en cours (peut prendre plusieurs minutes)...")
+        print("\nCompilation en cours (peut prendre plusieurs minutes)...")
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print("✅ Compilation optimisée réussie!")
+        print("Compilation optimisee reussie!")
         
         # Vérifier le résultat
         exe_path = Path('dist/RockSmithGuitarMute_Optimized.exe')
         if exe_path.exists():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
-            print(f"📁 Exécutable créé: {exe_path}")
-            print(f"📏 Taille: {size_mb:.1f} MB")
+            print(f"Executable cree: {exe_path}")
+            print(f"Taille: {size_mb:.1f} MB")
             return True
         else:
-            print("❌ Exécutable non trouvé après compilation")
+            print("Executable non trouve apres compilation")
             return False
             
     except subprocess.CalledProcessError as e:
-        print(f"❌ Erreur de compilation:")
+        print(f"Erreur de compilation:")
         print(f"STDOUT: {e.stdout}")
         print(f"STDERR: {e.stderr}")
         return False
@@ -183,12 +183,12 @@ def build_optimized_onefile():
 
 def main():
     """Fonction principale d'optimisation."""
-    print("🎯 Optimisation de la taille d'exécutable")
-    print("🎮 Conservation du support CUDA")
+    print("Optimisation de la taille d'executable")
+    print("Conservation du support CUDA")
     print("=" * 50)
     
     # Compilation directe optimisée (seule méthode conservée)
-    print("\n🔨 Compilation optimisée")
+    print("\nCompilation optimisee")
     success = build_optimized_onefile()
     
     # Affichage du résultat
@@ -196,18 +196,18 @@ def main():
         exe_path = Path('dist/RockSmithGuitarMute_Optimized.exe')
         if exe_path.exists():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
-            print(f"\n📊 Résultat de l'optimisation:")
-            print(f"  📁 Exécutable optimisé: {exe_path}")
-            print(f"  📏 Taille finale: {size_mb:.1f} MB")
-            print(f"  🎯 Réduction par rapport à la version originale (416 MB): {416 - size_mb:.1f} MB")
-            print(f"  📈 Pourcentage de réduction: {((416 - size_mb) / 416) * 100:.1f}%")
+            print(f"\nResultat de l'optimisation:")
+            print(f"  Executable optimise: {exe_path}")
+            print(f"  Taille finale: {size_mb:.1f} MB")
+            print(f"  Reduction par rapport a la version originale (416 MB): {416 - size_mb:.1f} MB")
+            print(f"  Pourcentage de reduction: {((416 - size_mb) / 416) * 100:.1f}%")
         
-        print("\n✅ Optimisation réussie!")
-        print("💡 Testez l'exécutable pour vérifier qu'il fonctionne correctement")
-        print("🚀 Lancez: dist\\RockSmithGuitarMute_Optimized.exe")
+        print("\nOptimisation reussie!")
+        print("Testez l'executable pour verifier qu'il fonctionne correctement")
+        print("Lancez: dist\\RockSmithGuitarMute_Optimized.exe")
     else:
-        print("\n❌ Échec de l'optimisation")
-        print("💡 Utilisez la version originale ou ajustez les exclusions")
+        print("\nEchec de l'optimisation")
+        print("Utilisez la version originale ou ajustez les exclusions")
 
 if __name__ == "__main__":
     main()
