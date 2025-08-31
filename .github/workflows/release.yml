@@ -78,25 +78,45 @@ jobs:
         python build_windows.py --debug
         echo "=== Build Completed ==="
       shell: cmd
-      continue-on-error: true
     
-    - name: Check build logs
+    - name: Check build logs and status
       run: |
+        Write-Host "=== Build Status Check ==="
+        
+        # Check if build completed successfully by looking for expected outputs
+        $buildSuccess = $false
+        
+        if (Test-Path "build/dist") {
+          Write-Host "✅ build/dist directory exists"
+          $buildSuccess = $true
+        } else {
+          Write-Host "❌ build/dist directory missing"
+        }
+        
+        # Look for any log files
+        Write-Host ""
         Write-Host "=== Checking for build logs ==="
-        if (Test-Path "build/build.log") {
-          Write-Host "Build log found:"
-          Get-Content "build/build.log" -Tail 50
-        }
-        if (Test-Path "build/*.log") {
-          Write-Host "Other log files found:"
-          Get-ChildItem "build/*.log" | ForEach-Object {
-            Write-Host "--- $($_.Name) ---"
-            Get-Content $_.FullName -Tail 20
+        $logFiles = Get-ChildItem "build" -Filter "*.log" -ErrorAction SilentlyContinue
+        if ($logFiles) {
+          foreach ($logFile in $logFiles) {
+            Write-Host "--- $($logFile.Name) ---"
+            Get-Content $logFile.FullName -Tail 30
+            Write-Host ""
           }
+        } else {
+          Write-Host "No log files found"
         }
-        Write-Host "=== End of logs ==="
+        
+        # Check for PyInstaller spec files
+        $specFiles = Get-ChildItem "build" -Filter "*.spec" -ErrorAction SilentlyContinue
+        if ($specFiles) {
+          Write-Host "PyInstaller spec files found:"
+          $specFiles | ForEach-Object { Write-Host "  $($_.Name)" }
+        }
+        
+        Write-Host "=== End of build status check ==="
       shell: powershell
-      continue-on-error: true
+      if: always()
     
     - name: Debug build output
       run: |
@@ -130,44 +150,93 @@ jobs:
     
     - name: Verify build output
       run: |
-        # Check in build/dist directory (where PyInstaller creates the executable)
-        if (Test-Path "build/dist/RockSmithGuitarMute.exe") {
-          Write-Host "Executable built successfully in build/dist/"
-          $size = (Get-Item "build/dist/RockSmithGuitarMute.exe").Length / 1MB
-          Write-Host "Size: $([math]::Round($size, 2)) MB"
+        Write-Host "=== Searching for built executable ==="
+        
+        # PyInstaller creates in build/dist/ (relative to build directory)
+        # Check both onefile and onedir locations
+        $exePaths = @(
+          "build/dist/RockSmithGuitarMute.exe",                    # onefile mode
+          "build/dist/RockSmithGuitarMute/RockSmithGuitarMute.exe" # onedir mode
+        )
+        
+        $foundExe = $null
+        foreach ($exePath in $exePaths) {
+          if (Test-Path $exePath) {
+            $foundExe = $exePath
+            Write-Host "✅ Executable found: $exePath"
+            break
+          }
+        }
+        
+        if ($foundExe) {
+          $size = (Get-Item $foundExe).Length / 1MB
+          Write-Host "📊 Size: $([math]::Round($size, 2)) MB"
           
           # Verify executable size (should be around 300+ MB for complete build)
-          if ($size -lt 200) {
-            Write-Host "WARNING: Executable size is suspiciously small ($([math]::Round($size, 2)) MB)"
-            Write-Host "Expected size: ~300+ MB. Build may be incomplete."
-            Write-Host "This could indicate missing PyTorch libraries or other dependencies."
+          if ($size -lt 50) {
+            Write-Host "❌ WARNING: Executable size is suspiciously small ($([math]::Round($size, 2)) MB)"
+            Write-Host "Expected size: ~300+ MB for onedir, ~500+ MB for onefile"
+            Write-Host "This indicates missing PyTorch libraries or build failure."
+            exit 1
           } else {
-            Write-Host "Executable size looks good ($([math]::Round($size, 2)) MB)"
+            Write-Host "✅ Executable size looks reasonable ($([math]::Round($size, 2)) MB)"
           }
           
-          # Move executable to root dist directory for consistency
+          # Create root dist directory and copy executable
           if (-not (Test-Path "dist")) {
             New-Item -ItemType Directory -Path "dist"
           }
-          Copy-Item "build/dist/RockSmithGuitarMute.exe" "dist/"
-          Write-Host "Executable copied to dist/ directory"
+          
+          if ($foundExe -like "*RockSmithGuitarMute.exe") {
+            # onefile mode - copy directly
+            Copy-Item $foundExe "dist/"
+            Write-Host "📁 Executable copied to dist/"
+          } else {
+            # onedir mode - copy entire directory
+            $sourceDir = Split-Path $foundExe -Parent
+            Copy-Item $sourceDir "dist/" -Recurse -Force
+            Write-Host "📁 Executable directory copied to dist/"
+          }
         } else {
-          Write-Host "Executable not found in build/dist/"
-          Write-Host "Checking build/dist contents:"
+          Write-Host "❌ Executable not found in expected locations"
+          
+          # Debug information
+          Write-Host ""
+          Write-Host "=== Debug Information ==="
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host ""
+          
+          Write-Host "Contents of build directory:"
+          if (Test-Path "build") {
+            Get-ChildItem "build" -Force | Format-Table Name, Length, LastWriteTime -AutoSize
+          } else {
+            Write-Host "build directory does not exist"
+          }
+          
+          Write-Host ""
+          Write-Host "Contents of build/dist directory:"
           if (Test-Path "build/dist") {
-            Get-ChildItem "build/dist" -Force | Format-Table Name, Length, LastWriteTime
+            Get-ChildItem "build/dist" -Force -Recurse | Format-Table Name, FullName, Length, LastWriteTime -AutoSize
           } else {
             Write-Host "build/dist directory does not exist"
           }
           
-          Write-Host "Searching for executable in all directories..."
-          $exeFiles = Get-ChildItem -Recurse -Name "*.exe" -ErrorAction SilentlyContinue
-          if ($exeFiles) {
+          Write-Host ""
+          Write-Host "Searching for ALL .exe files recursively..."
+          $allExeFiles = Get-ChildItem -Recurse -Name "*.exe" -ErrorAction SilentlyContinue
+          if ($allExeFiles) {
             Write-Host "Found .exe files:"
-            $exeFiles | ForEach-Object { Write-Host "  $_" }
+            $allExeFiles | ForEach-Object { 
+              $fullPath = Get-ChildItem -Recurse -Name $_ | Select-Object -First 1
+              $size = (Get-Item $fullPath).Length / 1MB
+              Write-Host "  $_ ($([math]::Round($size, 2)) MB)"
+            }
           } else {
             Write-Host "No .exe files found anywhere"
           }
+          
+          Write-Host ""
+          Write-Host "Build may have failed. Check build logs above."
           exit 1
         }
       shell: powershell
