@@ -16,6 +16,11 @@ def check_dependencies():
     """Vérifie que toutes les dépendances sont installées."""
     print("🔍 Vérification des dépendances...")
     
+    # Afficher l'environnement pour debug
+    print(f"📋 Environnement Python:")
+    print(f"  - Version: {sys.version}")
+    print(f"  - Exécutable: {sys.executable}")
+    
     # Packages avec leurs noms d'import alternatifs
     required_packages = [
         ('PyInstaller', 'pyinstaller'),  # PyInstaller s'importe avec une majuscule
@@ -27,19 +32,42 @@ def check_dependencies():
     ]
     
     missing_packages = []
+    version_info = {}
     
     for import_name, package_name in required_packages:
         try:
-            __import__(import_name)
-            print(f"  ✓ {package_name}")
+            module = __import__(import_name)
+            version = getattr(module, '__version__', 'version inconnue')
+            version_info[package_name] = version
+            print(f"  ✓ {package_name} ({version})")
         except ImportError:
             # Essayer avec le nom alternatif
             try:
-                __import__(package_name)
-                print(f"  ✓ {package_name}")
+                module = __import__(package_name)
+                version = getattr(module, '__version__', 'version inconnue')
+                version_info[package_name] = version
+                print(f"  ✓ {package_name} ({version})")
             except ImportError:
                 missing_packages.append(package_name)
                 print(f"  ✗ {package_name} (manquant)")
+    
+    # Vérifications spéciales pour PyTorch
+    if 'torch' in version_info:
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+            cuda_count = torch.cuda.device_count() if cuda_available else 0
+            print(f"  📊 PyTorch CUDA: {'✓' if cuda_available else '✗'} ({cuda_count} GPU(s))")
+            
+            # Détecter si on est dans un environnement CI
+            is_ci = os.environ.get('GITHUB_ACTIONS') == 'true'
+            if is_ci:
+                print(f"  🤖 Environnement CI détecté (GitHub Actions)")
+            else:
+                print(f"  🖥️  Environnement local détecté")
+                
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors de la vérification PyTorch: {e}")
     
     if missing_packages:
         print(f"\n❌ Packages manquants: {', '.join(missing_packages)}")
