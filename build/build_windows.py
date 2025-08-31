@@ -245,7 +245,7 @@ excludes = [
 ]
 
 a = Analysis(
-    ['gui_main.py'],
+    ['../gui/gui_main.py'],
     pathex=['.'],
     binaries=python_dlls,
     datas=project_datas + demucs_datas,
@@ -354,7 +354,7 @@ def build_executable(debug=False, onefile=False):
             '--hidden-import', 'tkinter.filedialog',
             '--hidden-import', 'tkinter.messagebox',
             '--hidden-import', 'rsrtools.files.welder',
-            'gui_main.py'
+            '../gui/gui_main.py'
         ]
     else:
         # Pour onedir, utiliser le fichier .spec

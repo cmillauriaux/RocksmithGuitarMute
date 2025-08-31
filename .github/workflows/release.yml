@@ -44,7 +44,7 @@ jobs:
     
     - name: Build Windows executable
       run: |
-        # Set UTF-8 encoding for Python to handle Unicode characters
+        REM Set UTF-8 encoding for Python to handle Unicode characters
         set PYTHONIOENCODING=utf-8
         cd build
         python build_windows.py --onefile --no-optimize
