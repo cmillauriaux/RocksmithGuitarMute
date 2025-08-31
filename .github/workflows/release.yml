@@ -53,11 +53,11 @@ jobs:
     - name: Verify build output
       run: |
         if (Test-Path "dist/RockSmithGuitarMute.exe") {
-          Write-Host "✅ Executable built successfully"
+          Write-Host "Executable built successfully"
           $size = (Get-Item "dist/RockSmithGuitarMute.exe").Length / 1MB
-          Write-Host "📏 Size: $([math]::Round($size, 2)) MB"
+          Write-Host "Size: $([math]::Round($size, 2)) MB"
         } else {
-          Write-Host "❌ Executable not found"
+          Write-Host "Executable not found"
           exit 1
         }
       shell: powershell
@@ -91,7 +91,7 @@ jobs:
         )
         "@ | Out-File -FilePath "release-windows/launch.bat" -Encoding ASCII
         
-        Write-Host "✅ Windows distribution package created"
+        Write-Host "Windows distribution package created"
       shell: powershell
     
     - name: Upload Windows build artifact
@@ -129,7 +129,7 @@ jobs:
                   --exclude='*.log' \
                   . release-source/
         
-        echo "✅ Source distribution created"
+        echo "Source distribution created"
     
     - name: Upload source artifact
       uses: actions/upload-artifact@v4
@@ -225,7 +225,7 @@ jobs:
         
         # Verify packages
         ls -lh *.zip
-        echo "✅ Release packages created"
+        echo "Release packages created"
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
@@ -243,6 +243,6 @@ jobs:
     
     - name: Update latest release info
       run: |
-        echo "🎉 Release ${{ steps.version.outputs.version }} created successfully!"
-        echo "📦 Windows executable and source code are now available for download."
-        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
+        echo "Release ${{ steps.version.outputs.version }} created successfully!"
+        echo "Windows executable and source code are now available for download."
+        echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"
