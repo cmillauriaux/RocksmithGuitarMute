@@ -557,7 +557,7 @@ def main():
     
     args = parser.parse_args()
     
-    print("🚀 RockSmith Guitar Mute - Compilation Windows")
+    print("RockSmith Guitar Mute - Compilation Windows")
     print("=" * 50)
     
     # Nettoyage

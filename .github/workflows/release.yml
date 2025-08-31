@@ -45,7 +45,7 @@ jobs:
     - name: Build Windows executable
       run: |
         cd build
-        python build_windows.py --onefile --no-optimize
+        python build_ci.py
       shell: cmd
     
     - name: Verify build output
