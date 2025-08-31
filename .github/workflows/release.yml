@@ -87,6 +87,13 @@ jobs:
         if (Test-Path "build") {
           Write-Host "Contents of build directory:"
           Get-ChildItem "build" -Force | Format-Table Name, Length, LastWriteTime
+          Write-Host ""
+          if (Test-Path "build/dist") {
+            Write-Host "Contents of build/dist directory:"
+            Get-ChildItem "build/dist" -Force | Format-Table Name, Length, LastWriteTime
+          } else {
+            Write-Host "build/dist directory does not exist"
+          }
         } else {
           Write-Host "build directory does not exist"
         }
@@ -94,12 +101,27 @@ jobs:
     
     - name: Verify build output
       run: |
-        if (Test-Path "dist/RockSmithGuitarMute.exe") {
-          Write-Host "Executable built successfully"
-          $size = (Get-Item "dist/RockSmithGuitarMute.exe").Length / 1MB
+        # Check in build/dist directory (where PyInstaller creates the executable)
+        if (Test-Path "build/dist/RockSmithGuitarMute.exe") {
+          Write-Host "Executable built successfully in build/dist/"
+          $size = (Get-Item "build/dist/RockSmithGuitarMute.exe").Length / 1MB
           Write-Host "Size: $([math]::Round($size, 2)) MB"
+          
+          # Move executable to root dist directory for consistency
+          if (-not (Test-Path "dist")) {
+            New-Item -ItemType Directory -Path "dist"
+          }
+          Copy-Item "build/dist/RockSmithGuitarMute.exe" "dist/"
+          Write-Host "Executable copied to dist/ directory"
         } else {
-          Write-Host "Executable not found in expected location"
+          Write-Host "Executable not found in build/dist/"
+          Write-Host "Checking build/dist contents:"
+          if (Test-Path "build/dist") {
+            Get-ChildItem "build/dist" -Force | Format-Table Name, Length, LastWriteTime
+          } else {
+            Write-Host "build/dist directory does not exist"
+          }
+          
           Write-Host "Searching for executable in all directories..."
           $exeFiles = Get-ChildItem -Recurse -Name "*.exe" -ErrorAction SilentlyContinue
           if ($exeFiles) {
