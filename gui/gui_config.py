@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 
 class GUIConfig:
-    """Gestionnaire de configuration pour l'interface graphique."""
+    """Configuration manager for the graphical interface."""
     
     def __init__(self):
         self.config_file = Path.home() / ".rocksmith_guitar_mute" / "config.json"
@@ -31,66 +31,66 @@ class GUIConfig:
         self.config = self.load_config()
     
     def load_config(self) -> Dict[str, Any]:
-        """Charge la configuration depuis le fichier."""
+        """Load configuration from file."""
         if self.config_file.exists():
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                # Fusionner avec les valeurs par défaut pour les nouvelles clés
+                # Merge with default values for new keys
                 merged_config = self.default_config.copy()
                 merged_config.update(config)
                 return merged_config
             except (json.JSONDecodeError, IOError):
-                # En cas d'erreur, utiliser la configuration par défaut
+                # In case of error, use default configuration
                 pass
         
         return self.default_config.copy()
     
     def save_config(self) -> None:
-        """Sauvegarde la configuration dans le fichier."""
+        """Save configuration to file."""
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
         except IOError:
-            # Ignorer les erreurs de sauvegarde
+            # Ignore save errors
             pass
     
     def get(self, key: str, default=None):
-        """Récupère une valeur de configuration."""
+        """Get a configuration value."""
         return self.config.get(key, default)
     
     def set(self, key: str, value: Any) -> None:
-        """Définit une valeur de configuration."""
+        """Set a configuration value."""
         self.config[key] = value
         if self.config.get("auto_save_config", True):
             self.save_config()
     
     def add_recent_input(self, path: str) -> None:
-        """Ajoute un chemin d'entrée aux récents."""
+        """Add an input path to recent ones."""
         recent = self.config.get("recent_inputs", [])
         if path in recent:
             recent.remove(path)
         recent.insert(0, path)
-        # Garder seulement les 10 derniers
+        # Keep only the last 10
         self.config["recent_inputs"] = recent[:10]
         if self.config.get("auto_save_config", True):
             self.save_config()
     
     def add_recent_output(self, path: str) -> None:
-        """Ajoute un chemin de sortie aux récents."""
+        """Add an output path to recent ones."""
         recent = self.config.get("recent_outputs", [])
         if path in recent:
             recent.remove(path)
         recent.insert(0, path)
-        # Garder seulement les 10 derniers
+        # Keep only the last 10
         self.config["recent_outputs"] = recent[:10]
         if self.config.get("auto_save_config", True):
             self.save_config()
     
     def get_recent_inputs(self) -> list:
-        """Récupère la liste des chemins d'entrée récents."""
+        """Get the list of recent input paths."""
         return self.config.get("recent_inputs", [])
     
     def get_recent_outputs(self) -> list:
-        """Récupère la liste des chemins de sortie récents."""
+        """Get the list of recent output paths."""
         return self.config.get("recent_outputs", [])

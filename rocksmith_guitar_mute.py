@@ -35,6 +35,25 @@ import torchaudio
 import soundfile as sf
 import numpy as np
 
+
+def find_project_root() -> Path:
+    """
+    Find the project root directory by looking for key files.
+    Works from any subdirectory of the project.
+    """
+    current = Path(__file__).parent.resolve()
+    
+    # Look for characteristic files that indicate the project root
+    markers = ['rs-utils', 'demucs', 'requirements.txt', 'setup.py']
+    
+    while current != current.parent:  # Stop at filesystem root
+        if all((current / marker).exists() for marker in markers[:2]):  # rs-utils and demucs are essential
+            return current
+        current = current.parent
+    
+    # Fallback: assume current directory is project root
+    return Path(__file__).parent.resolve()
+
 # Demucs imports
 try:
     import demucs.separate
@@ -66,6 +85,10 @@ class RocksmithGuitarMute:
         self.demucs_model = demucs_model
         self.device = self._get_device(device)
         self.logger = logging.getLogger(__name__)
+        
+        # Find project root for tool paths
+        self.project_root = find_project_root()
+        self.logger.debug(f"Project root detected at: {self.project_root}")
         
         self.logger.info(f"Initialized RocksmithGuitarMute with model {demucs_model} on {self.device}")
     
@@ -202,10 +225,10 @@ class RocksmithGuitarMute:
         self.logger.info(f"Converting WEM to WAV: {wem_path.name}")
         
         # Use ww2ogg and revorb tools from rs-utils
-        rs_utils_bin = Path("rs-utils/bin")
+        rs_utils_bin = self.project_root / "rs-utils/bin"
         ww2ogg = rs_utils_bin / "ww2ogg.exe"
         revorb = rs_utils_bin / "revorb.exe"
-        packed_codebooks = Path("rs-utils/share/packed_codebooks.bin")
+        packed_codebooks = self.project_root / "rs-utils/share/packed_codebooks.bin"
         
         # Convert WEM to OGG
         temp_ogg = output_path.with_suffix('.ogg')
@@ -364,7 +387,7 @@ class RocksmithGuitarMute:
         self.logger.info(f"Converting WAV to WEM: {wav_path.name}")
         
         # Use our Python version of audio2wem for Windows compatibility
-        audio2wem_script = Path("audio2wem_windows.py")
+        audio2wem_script = self.project_root / "audio2wem_windows.py"
         
         if not audio2wem_script.exists():
             self.logger.error("audio2wem_windows.py script not found")
@@ -372,7 +395,7 @@ class RocksmithGuitarMute:
         
         # Import and use the conversion function directly
         try:
-            sys.path.insert(0, str(Path.cwd()))
+            sys.path.insert(0, str(self.project_root))
             from audio2wem_windows import convert_audio_to_wem
             
             self.logger.info(f"Converting {wav_path.name} to WEM format...")

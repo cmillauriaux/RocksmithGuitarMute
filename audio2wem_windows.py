@@ -28,10 +28,21 @@ def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
     Returns:
         True if conversion successful, False otherwise
     """
-    # Get paths to rs-utils (should be in the current directory)
+    # Get paths to rs-utils (should be in the project root directory)
     script_dir = Path(__file__).parent.resolve()
-    rs_utils_bin = script_dir / "rs-utils" / "bin"
-    rs_utils_share = script_dir / "rs-utils" / "share"
+    
+    # Find project root by looking for rs-utils directory
+    project_root = script_dir
+    while project_root != project_root.parent:
+        if (project_root / "rs-utils").exists():
+            break
+        project_root = project_root.parent
+    else:
+        # Fallback to script directory
+        project_root = script_dir
+    
+    rs_utils_bin = project_root / "rs-utils" / "bin"
+    rs_utils_share = project_root / "rs-utils" / "share"
     
     wwise_template_tar = rs_utils_share / "Wwise_Template.tar.gz"
     

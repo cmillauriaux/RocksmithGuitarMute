@@ -8,7 +8,7 @@ This project automates the process of unpacking Rocksmith 2014 PSARC files, extr
 
 ## Features
 
-### ✨ **New Performance Optimizations**
+### ✨ **Performance Optimizations**
 - **Automatic Output Checking**: Skips files that have already been processed (unless `--force` is used)
 - **Parallel Processing**: Utilizes all CPU cores for maximum performance (one file per core)
 - **Configurable Workers**: Control the number of parallel workers with `--workers` option
@@ -34,13 +34,13 @@ The workflow consists of four main steps with parallel execution support:
 ```
 
 ### 1. Unpack PSARC Files
-Using the **Rocksmith2014.NET** library to extract the contents of Rocksmith 2014 PSARC archives. This library provides comprehensive support for:
+Extract the contents of Rocksmith 2014 PSARC archives:
 - Reading and writing PSARC archives
 - Handling Rocksmith 2014 file formats (SNG, XML, audio files)
 - Managing DLC project structures
 
 ### 2. Extract Audio
-The Rocksmith2014.NET Audio library handles audio conversion and extraction:
+Audio conversion and extraction:
 - Supports various audio formats (WAV, OGG, WEM)
 - Handles Wwise audio conversion
 - Maintains audio quality and metadata
@@ -93,7 +93,10 @@ A collection of Python scripts for Rocksmith 2014:
 
 ## Requirements
 
-### Dependencies
+### System Requirements
+- **Windows** (this tool only works on Windows)
+- **Wwise v2013.2.10 build 4884** - Required for audio conversion
+  - Download from: https://ignition4.customsforge.com/tools/wwise
 - Python 3.8+ (for Demucs and main application)
 - CUDA-compatible GPU (recommended for faster processing)
 - Git (for cloning with submodules)
@@ -221,27 +224,12 @@ The `sample/` directory contains example PSARC files for testing:
 
 ## Development
 
-### Building Rocksmith2014.NET
-```bash
-cd Rocksmith2014.NET
-dotnet build
-```
-
-### Setting up Demucs
-```bash
-cd demucs
-pip install -e .
-```
-
 ### Running Tests
 ```bash
-# .NET tests
-cd Rocksmith2014.NET
-dotnet test
-
-# Python tests (if available)
-cd demucs
-python -m pytest
+python tests/test_import.py
+python tests/test_gui.py
+python tests/test_guitar_extraction.py
+python tests/test_parallel_processing.py
 ```
 
 ## Audio Quality Considerations
@@ -258,11 +246,21 @@ python -m pytest
 - Some audio artifacts may be introduced during source separation
 - Works best with standard rock/pop arrangements
 
-## License
+## Dependencies and Acknowledgments
+
+This project relies on several excellent open-source libraries. We are grateful to their authors and contributors:
+
+### Core Dependencies
+- **[Demucs](https://github.com/facebookresearch/demucs)** by Facebook Research - State-of-the-art AI music source separation
+- **[RSRTools](https://github.com/BuongiornoTexas/rsrtools)** by BuongiornoTexas - Rocksmith 2014 PSARC handling and utilities
+- **[RS-Utils](https://github.com/0x0L/rs-utils)** by 0x0L - Collection of Python scripts for Rocksmith 2014
+
+### License
 
 This project combines multiple components with different licenses:
-- **Rocksmith2014.NET**: MIT License
 - **Demucs**: MIT License
+- **RSRTools**: Check repository for license terms
+- **RS-Utils**: Check repository for license terms
 
 Please refer to individual component directories for specific license terms.
 
@@ -273,12 +271,6 @@ Please refer to individual component directories for specific license terms.
 3. Make your changes
 4. Test with sample PSARC files
 5. Submit a pull request
-
-## Acknowledgments
-
-- [Rocksmith2014.NET](https://github.com/iminashi/Rocksmith2014.NET) by Tapio Malmberg
-- [Demucs](https://github.com/facebookresearch/demucs) by Facebook Research
-- Rocksmith 2014 by Ubisoft
 
 ---
 

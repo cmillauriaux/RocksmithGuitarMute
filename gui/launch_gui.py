@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script de lancement simple pour l'interface graphique RockSmith Guitar Mute
+Simple launch script for RockSmith Guitar Mute graphical interface
 """
 
 import sys
@@ -8,24 +8,24 @@ import os
 from pathlib import Path
 
 def main():
-    """Fonction principale de lancement."""
-    print("🚀 Lancement de RockSmith Guitar Mute GUI...")
+    """Main launch function."""
+    print("🚀 Launching RockSmith Guitar Mute GUI...")
     
-    # Ajouter le répertoire courant au path pour les imports
+    # Add current directory to path for imports
     current_dir = Path(__file__).parent
     sys.path.insert(0, str(current_dir))
     
-    # Vérifier que tkinter est disponible
+    # Check that tkinter is available
     try:
         import tkinter as tk
-        print("✅ Tkinter disponible")
+        print("✅ Tkinter available")
     except ImportError:
-        print("❌ Erreur: Tkinter n'est pas disponible")
-        print("Tkinter est normalement inclus avec Python. Réinstallez Python si nécessaire.")
-        input("Appuyez sur Entrée pour fermer...")
+        print("❌ Error: Tkinter is not available")
+        print("Tkinter is normally included with Python. Reinstall Python if necessary.")
+        input("Press Enter to close...")
         sys.exit(1)
     
-    # Nettoyer les fichiers .pyc qui pourraient causer des conflits
+    # Clean .pyc files that could cause conflicts
     try:
         import glob
         pyc_files = glob.glob("**/*.pyc", recursive=True)
@@ -33,33 +33,33 @@ def main():
             try:
                 os.remove(pyc_file)
             except:
-                pass  # Ignorer les erreurs de suppression
+                pass  # Ignore deletion errors
     except:
-        pass  # Ignorer les erreurs de nettoyage
+        pass  # Ignore cleanup errors
     
-    # Importer et lancer l'interface
+    # Import and launch interface
     try:
         from gui_main import main as gui_main
-        print("✅ Interface graphique chargée")
+        print("✅ Graphical interface loaded")
         gui_main()
         
     except ImportError as e:
-        print(f"❌ Erreur d'importation: {e}")
-        print("\n🔧 Solutions possibles:")
-        print("1. Installer les dépendances: pip install -r requirements.txt")
-        print("2. Nettoyer les fichiers temporaires: clean.bat")
-        print("3. Vérifier que tous les fichiers sont présents")
-        input("\nAppuyez sur Entrée pour fermer...")
+        print(f"❌ Import error: {e}")
+        print("\n🔧 Possible solutions:")
+        print("1. Install dependencies: pip install -r requirements.txt")
+        print("2. Clean temporary files: clean.bat")
+        print("3. Check that all files are present")
+        input("\nPress Enter to close...")
         sys.exit(1)
         
     except Exception as e:
-        print(f"❌ Erreur lors du lancement: {e}")
-        print(f"Type d'erreur: {type(e).__name__}")
-        print("\n🔧 Essayez de:")
-        print("1. Nettoyer les fichiers temporaires: clean.bat")
-        print("2. Redémarrer votre ordinateur")
-        print("3. Vérifier les logs pour plus de détails")
-        input("\nAppuyez sur Entrée pour fermer...")
+        print(f"❌ Launch error: {e}")
+        print(f"Error type: {type(e).__name__}")
+        print("\n🔧 Try to:")
+        print("1. Clean temporary files: clean.bat")
+        print("2. Restart your computer")
+        print("3. Check logs for more details")
+        input("\nPress Enter to close...")
         sys.exit(1)
 
 if __name__ == "__main__":
