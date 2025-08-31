@@ -5,6 +5,19 @@ demucs
 soundfile>=0.12.0
 numpy>=1.21.0
 
+# Critical PyTorch/Demucs dependencies (missing from auto-install)
+cffi>=1.0
+filelock>=3.0
+fsspec>=2024.0
+jinja2>=3.0
+markupsafe>=2.0
+mpmath>=1.0
+networkx>=3.0
+protobuf>=4.0
+safetensors>=0.4
+sympy>=1.13
+pillow>=10.0
+
 # Dependencies for rs-utils (Python scripts for Rocksmith 2014)
 construct>=2.5.1
 docopt>=0.6.1
