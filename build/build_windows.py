@@ -83,17 +83,17 @@ def clean_build_dirs():
     print("Nettoyage des builds precedents...")
     
     dirs_to_clean = ['build', 'dist', '__pycache__']
-    files_to_clean = ['*.spec']
     
     for dir_name in dirs_to_clean:
         if Path(dir_name).exists():
             shutil.rmtree(dir_name)
             print(f"  Supprime: {dir_name}")
     
-    # Nettoyer les fichiers .spec
-    for spec_file in Path('.').glob('*.spec'):
-        spec_file.unlink()
-        print(f"  Supprime: {spec_file}")
+    # NE PAS supprimer les fichiers .spec - ils contiennent la configuration importante
+    # for spec_file in Path('.').glob('*.spec'):
+    #     spec_file.unlink()
+    #     print(f"  Supprime: {spec_file}")
+    print("  Conservation des fichiers .spec (configuration importante)")
 
 
 def get_torch_paths():
@@ -569,10 +569,14 @@ def build_executable(debug=False, onefile=False):
     
     if onefile:
         print("Mode onefile active (peut resoudre les problemes de DLL)")
+        print("DEBUG: Utilisation de la logique amelioree avec inclusion DLL")
         
         # Récupérer les DLL Python pour les inclure explicitement
         python_dlls = get_python_dll_paths()
         demucs_data = get_demucs_data_files()
+        
+        print(f"DEBUG: Trouvé {len(python_dlls)} DLL Python à inclure")
+        print(f"DEBUG: Trouvé {len(demucs_data)} fichiers Demucs à inclure")
         
         # Pour onefile, utiliser directement PyInstaller sans .spec
         cmd = [
@@ -835,16 +839,11 @@ def main():
         print("OK Nettoyage termine!")
         return
     
-    # Mode optimisation
+    # Mode optimisation - utiliser notre logique améliorée au lieu du script externe
     if args.optimize:
-        print("Mode optimisation active - reduction de la taille")
-        try:
-            import optimize_build
-            optimize_build.main()
-            return
-        except ImportError:
-            print("ERREUR Script d'optimisation non trouve, compilation normale...")
-            # Continuer avec la compilation normale
+        print("Mode optimisation active - reduction de la taille avec DLL incluses")
+        print("Utilisation de la logique d'optimisation integree...")
+        # Ne pas utiliser le script externe, continuer avec notre logique améliorée
     
     # Vérification des dépendances
     if not check_dependencies():
@@ -853,7 +852,8 @@ def main():
     # Création du fichier spec
     create_pyinstaller_spec(onefile=args.onefile, debug=args.debug)
     
-    # Compilation
+    # Compilation avec nos améliorations DLL
+    print("Compilation avec inclusion forcee des DLL Python...")
     if not build_executable(debug=args.debug, onefile=args.onefile):
         print("ERREUR Echec de la compilation!")
         sys.exit(1)
