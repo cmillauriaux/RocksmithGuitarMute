@@ -126,7 +126,7 @@ def build_optimized_onefile():
     cmd = [
         sys.executable, '-m', 'PyInstaller',
         '--clean', '--noconfirm', '--onefile', '--windowed',
-        '--name', 'RockSmithGuitarMute_Optimized',
+        '--name', 'RockSmithGuitarMute',
         
         # Données nécessaires
         '--add-data', '../rs-utils;rs-utils',
@@ -163,7 +163,7 @@ def build_optimized_onefile():
         print("Compilation optimisee reussie!")
         
         # Vérifier le résultat
-        exe_path = Path('dist/RockSmithGuitarMute_Optimized.exe')
+        exe_path = Path('dist/RockSmithGuitarMute.exe')
         if exe_path.exists():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
             print(f"Executable cree: {exe_path}")
@@ -194,7 +194,7 @@ def main():
     
     # Affichage du résultat
     if success:
-        exe_path = Path('dist/RockSmithGuitarMute_Optimized.exe')
+        exe_path = Path('dist/RockSmithGuitarMute.exe')
         if exe_path.exists():
             size_mb = exe_path.stat().st_size / (1024 * 1024)
             print(f"\nResultat de l'optimisation:")
@@ -205,7 +205,7 @@ def main():
         
         print("\nOptimisation reussie!")
         print("Testez l'executable pour verifier qu'il fonctionne correctement")
-        print("Lancez: dist\\RockSmithGuitarMute_Optimized.exe")
+        print("Lancez: dist\\RockSmithGuitarMute.exe")
     else:
         print("\nEchec de l'optimisation")
         print("Utilisez la version originale ou ajustez les exclusions")
