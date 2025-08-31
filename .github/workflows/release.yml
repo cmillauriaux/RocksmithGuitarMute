@@ -34,7 +34,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.12'
         cache: 'pip'
     
     - name: Verify system dependencies
@@ -76,7 +76,9 @@ jobs:
     - name: Build Windows executable
       run: |
         cd build
+        echo "=== Starting Build ==="
         python build_windows.py
+        echo "=== Build Completed ==="
       shell: cmd
     
     - name: Check build logs and status
@@ -175,15 +177,13 @@ jobs:
           
           # Verify executable size and provide detailed diagnostics
           Write-Host "=== SIZE ANALYSIS ==="
-          if ($size -lt 100) {
-            Write-Host "WARNING: Executable size is small ($sizeRounded MB)"
-            Write-Host "Expected size: ~300+ MB for onedir, ~500+ MB for onefile"
-            Write-Host "This likely indicates missing PyTorch libraries."
-            
-            # Don't exit immediately, let's see what's included
-            Write-Host "Continuing to analyze what was actually packaged..."
+          if ($size -lt 30) {
+            Write-Host "ERROR: Executable size is too small ($sizeRounded MB)"
+            Write-Host "Expected size: ~35+ MB for executable, ~300+ MB total for onedir"
+            Write-Host "This indicates a build failure."
+            exit 1
           } else {
-            Write-Host "SUCCESS: Executable size looks reasonable ($sizeRounded MB)"
+            Write-Host "SUCCESS: Executable size looks good ($sizeRounded MB)"
           }
           
           # Create root dist directory and copy executable
