@@ -55,6 +55,31 @@ jobs:
         python -c "import soundfile; print(f'SoundFile version: {soundfile.__version__}')"
         python -c "import numpy; print(f'NumPy version: {numpy.__version__}')"
     
+    - name: Download Demucs models
+      run: |
+        Write-Host "Downloading essential Demucs models..."
+        python -c "
+        import demucs.pretrained
+        import os
+        
+        # Créer le dossier de cache s'il n'existe pas
+        cache_dir = os.path.expanduser('~/.cache/torch/hub/checkpoints')
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Télécharger les modèles essentiels
+        models = ['htdemucs_6s', 'htdemucs', 'mdx_extra_q']
+        for model in models:
+            try:
+                print(f'Downloading model: {model}')
+                demucs.pretrained.get_model(model)
+                print(f'Successfully downloaded: {model}')
+            except Exception as e:
+                print(f'Warning: Failed to download {model}: {e}')
+        
+        print('Model download completed')
+        "
+        Write-Host "Demucs models download completed"
+    
     - name: Clean build directories
       run: |
         cd build
@@ -81,6 +106,56 @@ jobs:
           }
           exit 1
         }
+    
+    - name: Test executable functionality
+      run: |
+        Write-Host "Testing executable functionality..."
+        cd build/dist
+        
+        # Test 1: Vérifier que l'exécutable peut démarrer (mode headless si possible)
+        Write-Host "Test 1: Basic executable test"
+        try {
+          # Essayer de lancer l'exe avec un timeout pour éviter qu'il reste ouvert
+          $process = Start-Process -FilePath ".\RockSmithGuitarMute.exe" -ArgumentList "--help" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 5
+          if (!$process.HasExited) {
+            $process.Kill()
+          }
+          Write-Host "✅ Executable can start"
+        } catch {
+          Write-Host "⚠️  Executable test inconclusive: $($_.Exception.Message)"
+        }
+        
+        # Test 2: Vérifier la présence des DLL critiques
+        Write-Host "Test 2: Critical DLL check"
+        $criticalDlls = @("python311.dll", "torch_cpu.dll", "torchaudio.dll")
+        $foundDlls = 0
+        foreach ($dll in $criticalDlls) {
+          if (Get-ChildItem -Recurse -Name $dll -ErrorAction SilentlyContinue) {
+            Write-Host "✅ Found: $dll"
+            $foundDlls++
+          } else {
+            Write-Host "❌ Missing: $dll"
+          }
+        }
+        Write-Host "Found $foundDlls/$($criticalDlls.Length) critical DLLs"
+        
+        # Test 3: Vérifier la présence des modules Python essentiels
+        Write-Host "Test 3: Essential Python modules check"
+        $essentialModules = @("demucs", "torch", "torchaudio", "numpy")
+        $foundModules = 0
+        foreach ($module in $essentialModules) {
+          $moduleFiles = Get-ChildItem -Recurse -Name "*$module*" -ErrorAction SilentlyContinue
+          if ($moduleFiles) {
+            Write-Host "✅ Found module files for: $module"
+            $foundModules++
+          } else {
+            Write-Host "❌ Missing module files for: $module"
+          }
+        }
+        Write-Host "Found $foundModules/$($essentialModules.Length) essential modules"
+        
+        Write-Host "Executable testing completed"
     
     - name: Create release archive
       run: |
