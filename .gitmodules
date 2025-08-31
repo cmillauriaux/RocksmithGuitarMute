@@ -1,0 +1,9 @@
+[submodule "rs-utils"]
+	path = rs-utils
+	url = https://github.com/v8187/rs-utils.git
+[submodule "rsrtools"]
+	path = rsrtools
+	url = https://github.com/BuongiornoTexas/rsrtools.git
+[submodule "demucs"]
+	path = demucs
+	url = https://github.com/adefossez/demucs.git

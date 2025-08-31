@@ -1,7 +1,38 @@
+# Output directories
 output/
 test_output/
 test_output_ogg/
 sample/
 input/
-build/
+
+# Build artifacts
+build/RockSmithGuitarMute_*/
+build/*.exe
 dist/
+*.spec
+
+# Python cache and logs
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Temporary files
+*.tmp
+*.temp
