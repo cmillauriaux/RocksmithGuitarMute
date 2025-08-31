@@ -233,11 +233,9 @@ hidden_imports = [
     'demucs',
     'demucs.separate',
     'demucs.pretrained',
-    'demucs.api',
     'soundfile',
     'numpy',
     'scipy',
-    'librosa',
     'tkinter',
     'tkinter.ttk',
     'tkinter.filedialog',
@@ -254,8 +252,11 @@ hidden_imports = [
     'argparse',
     'sys',
     'os',
+    # rsrtools imports (corriger le chemin)
+    'rsrtools',
+    'rsrtools.files',
     'rsrtools.files.welder',
-    'rsrtools.files.config',
+    'rsrtools.files.config', 
     'rsrtools.files.exceptions',
     # Imports cachés supplémentaires pour PyTorch
     'torch.nn',
@@ -277,15 +278,18 @@ hidden_imports = [
     'torchaudio.models',
     'torchaudio._extension',
     'torchaudio.io',
-    # Imports pour Demucs
+    # Imports pour Demucs  
     'demucs.hdemucs',
-    'demucs.htdemucs',
+    'demucs.htdemucs', 
     'demucs.wdemucs',
     'demucs.transformer',
     'demucs.spec',
     'demucs.states',
     'demucs.utils',
     'demucs.wav',
+    'demucs.audio',
+    'demucs.repo',
+    'demucs.apply',
 ]
 
 # Exclusions pour réduire la taille (mais garder les dépendances essentielles)
