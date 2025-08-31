@@ -45,7 +45,7 @@ jobs:
     - name: Build Windows executable
       run: |
         cd build
-        python build_github_actions.py
+        python build_windows.py --onefile --no-optimize
       shell: cmd
     
     - name: Verify build output
