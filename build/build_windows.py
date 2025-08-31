@@ -217,6 +217,7 @@ def get_demucs_data_files():
     """Récupère les fichiers de données Demucs nécessaires."""
     try:
         import demucs
+        import torch
         demucs_path = Path(demucs.__file__).parent
         
         data_files = []
@@ -235,6 +236,29 @@ def get_demucs_data_files():
                 if remote_file.is_file():
                     rel_path = remote_file.relative_to(demucs_path.parent)
                     data_files.append((str(remote_file), str(rel_path.parent)))
+        
+        # Inclure les modèles Demucs téléchargés
+        print("DEBUG: Searching for Demucs models...")
+        model_locations = [
+            Path.home() / ".cache" / "torch" / "hub" / "checkpoints",
+            Path.home() / "AppData" / "Local" / "torch" / "hub" / "checkpoints",
+            Path.home() / ".torch" / "models",
+        ]
+        
+        model_count = 0
+        for cache_dir in model_locations:
+            if cache_dir.exists():
+                print(f"DEBUG: Searching in {cache_dir}")
+                for model_file in cache_dir.glob("*.th"):
+                    # Vérifier si c'est un modèle Demucs
+                    if any(model_name in model_file.name for model_name in ['htdemucs', 'mdx', 'demucs']):
+                        data_files.append((str(model_file), 'torch_models'))
+                        model_count += 1
+                        print(f"DEBUG: Including model: {model_file.name} ({model_file.stat().st_size / (1024*1024):.1f} MB)")
+        
+        print(f"DEBUG: Found {model_count} Demucs model files")
+        if model_count == 0:
+            print("WARNING: No Demucs models found! The application may not work properly.")
         
         return data_files
     except ImportError:
@@ -382,25 +406,67 @@ a = Analysis(
 # Filtrer les fichiers inutiles
 def filter_binaries(binaries):
     """Filtre les binaires pour garder seulement ceux nécessaires."""
+    # Patterns à GARDER (plus conservateur)
     keep_patterns = [
-        'torch',
-        'torchaudio', 
-        'demucs',
-        'soundfile',
-        'numpy',
-        'scipy',
-        '_ctypes',
-        'msvcr',
-        'msvcp',
-        'vcruntime',
+        # Bibliothèques ML/Audio essentielles
+        'torch', 'torchaudio', 'demucs', 'soundfile', 'numpy', 'scipy',
+        # Runtime Python et système
+        'python', 'msvcr', 'msvcp', 'vcruntime', 'ucrtbase', '_ctypes',
+        # DLL Windows API essentielles
+        'api-ms-win', 'kernel32', 'user32', 'advapi32', 'shell32', 'ole32',
+        'ws2_32', 'crypt32', 'gdi32', 'comctl32', 'winmm', 'version',
+        'ntdll', 'kernelbase', 'dbghelp', 'imagehlp',
+        # Bibliothèques crypto et compression
+        'libffi', 'libssl', 'libcrypto', 'zlib', 'bz2', 'lzma', 'sqlite3',
+        # Modules Python core
+        'ssl', 'hashlib', 'ctypes', 'multiprocessing', 'queue', 'socket',
+        'threading', 'logging', 'json', 'xml', 'urllib', 'http', 'email',
+        'datetime', 'collections', 'itertools', 'functools', 'operator',
+        'struct', 'codecs', 'encodings', 'locale', 'tempfile', 'shutil',
+        'pathlib', 'os', 'sys', 'io', 'abc', 'types', 'copy', 'pickle',
+        'random', 'math', 'decimal', 'string', 're', 'uuid', 'base64',
+        'binascii', 'gzip', 'zipfile', 'tarfile', 'csv', 'argparse',
+        # Tkinter pour l'interface graphique
+        'tkinter', '_tkinter', 'tcl', 'tk',
+        # Bibliothèques audio spécifiques
+        'diffq', 'einops', 'julius', 'openunmix', 'tqdm', 'omegaconf',
+        # Autres dépendances importantes
+        'setuptools', 'pkg_resources', 'importlib', 'distutils'
+    ]
+    
+    # Patterns à EXCLURE (seulement les plus évidents)
+    exclude_patterns = [
+        'test_', 'tests/', '/test', 'testing',
+        'benchmark', 'example', 'demo', 'tutorial', 'sample',
+        'matplotlib', 'seaborn', 'plotly', 'bokeh', 'pandas',
+        'sklearn', 'scikit', 'cv2', 'opencv', 'PIL', 'Pillow',
+        'jupyter', 'notebook', 'IPython', 'ipykernel',
+        'torchvision', 'torchtext', 'sympy', 'networkx'
     ]
     
     filtered = []
+    excluded_count = 0
+    
     for binary in binaries:
         name = binary[0].lower()
-        if any(pattern in name for pattern in keep_patterns):
+        
+        # Vérifier d'abord les exclusions
+        should_exclude = any(pattern in name for pattern in exclude_patterns)
+        if should_exclude:
+            excluded_count += 1
+            continue
+            
+        # Puis vérifier les inclusions (plus permissif maintenant)
+        should_keep = any(pattern in name for pattern in keep_patterns)
+        if should_keep:
             filtered.append(binary)
+        else:
+            # Pour les fichiers non reconnus, les garder par défaut (plus sûr)
+            # sauf s'ils sont clairement des tests ou de la documentation
+            if not any(bad_pattern in name for bad_pattern in ['test', 'doc', 'example', 'demo', 'benchmark']):
+                filtered.append(binary)
     
+    print(f"DEBUG: Filtered out {excluded_count} binaries, kept {len(filtered)}")
     return filtered
 
 a.binaries = filter_binaries(a.binaries)

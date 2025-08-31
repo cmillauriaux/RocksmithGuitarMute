@@ -46,6 +46,8 @@ jobs:
         # Force complete PyTorch installation with all dependencies
         pip install torch torchaudio --force-reinstall --no-cache-dir
         pip install -e rsrtools/
+        # Install additional dependencies for Demucs models
+        pip install diffq
     
     - name: Verify dependencies
       run: |
