@@ -155,31 +155,32 @@ jobs:
         # PyInstaller creates in build/dist/ (relative to build directory)
         # Check both onefile and onedir locations
         $exePaths = @(
-          "build/dist/RockSmithGuitarMute.exe",                    # onefile mode
-          "build/dist/RockSmithGuitarMute/RockSmithGuitarMute.exe" # onedir mode
+          "build/dist/RockSmithGuitarMute.exe",
+          "build/dist/RockSmithGuitarMute/RockSmithGuitarMute.exe"
         )
         
         $foundExe = $null
         foreach ($exePath in $exePaths) {
           if (Test-Path $exePath) {
             $foundExe = $exePath
-            Write-Host "✅ Executable found: $exePath"
+            Write-Host "SUCCESS: Executable found at $exePath"
             break
           }
         }
         
         if ($foundExe) {
           $size = (Get-Item $foundExe).Length / 1MB
-          Write-Host "📊 Size: $([math]::Round($size, 2)) MB"
+          $sizeRounded = [math]::Round($size, 2)
+          Write-Host "Size: $sizeRounded MB"
           
           # Verify executable size (should be around 300+ MB for complete build)
           if ($size -lt 50) {
-            Write-Host "❌ WARNING: Executable size is suspiciously small ($([math]::Round($size, 2)) MB)"
+            Write-Host "ERROR: Executable size is suspiciously small ($sizeRounded MB)"
             Write-Host "Expected size: ~300+ MB for onedir, ~500+ MB for onefile"
             Write-Host "This indicates missing PyTorch libraries or build failure."
             exit 1
           } else {
-            Write-Host "✅ Executable size looks reasonable ($([math]::Round($size, 2)) MB)"
+            Write-Host "SUCCESS: Executable size looks reasonable ($sizeRounded MB)"
           }
           
           # Create root dist directory and copy executable
@@ -190,15 +191,15 @@ jobs:
           if ($foundExe -like "*RockSmithGuitarMute.exe") {
             # onefile mode - copy directly
             Copy-Item $foundExe "dist/"
-            Write-Host "📁 Executable copied to dist/"
+            Write-Host "Executable copied to dist/"
           } else {
             # onedir mode - copy entire directory
             $sourceDir = Split-Path $foundExe -Parent
             Copy-Item $sourceDir "dist/" -Recurse -Force
-            Write-Host "📁 Executable directory copied to dist/"
+            Write-Host "Executable directory copied to dist/"
           }
         } else {
-          Write-Host "❌ Executable not found in expected locations"
+          Write-Host "ERROR: Executable not found in expected locations"
           
           # Debug information
           Write-Host ""
@@ -228,8 +229,9 @@ jobs:
             Write-Host "Found .exe files:"
             $allExeFiles | ForEach-Object { 
               $fullPath = Get-ChildItem -Recurse -Name $_ | Select-Object -First 1
-              $size = (Get-Item $fullPath).Length / 1MB
-              Write-Host "  $_ ($([math]::Round($size, 2)) MB)"
+              $fileSize = (Get-Item $fullPath).Length / 1MB
+              $fileSizeRounded = [math]::Round($fileSize, 2)
+              Write-Host "  $_ ($fileSizeRounded MB)"
             }
           } else {
             Write-Host "No .exe files found anywhere"
