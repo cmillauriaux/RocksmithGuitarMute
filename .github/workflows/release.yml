@@ -4,6 +4,10 @@ on:
   push:
     branches: [ master ]
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build-windows:
     runs-on: windows-2022
@@ -56,7 +60,7 @@ jobs:
     - name: Build executable
       run: |
         cd build
-        python build_windows.py --onefile
+        python build_windows.py --onefile --optimize
       env:
         GITHUB_ACTIONS: 'true'
     
