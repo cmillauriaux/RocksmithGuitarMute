@@ -399,7 +399,7 @@ class RocksmithGuitarMuteGUI:
                 self.message_queue.put(('status', f"Processing {psarc_file.name} ({i+1}/{total_files})"))
                 self.message_queue.put(('progress', (i / total_files) * 100))
                 
-                                try:
+                try:
                     # File processing
                     result = processor.process_psarc_file(
                         psarc_file,
