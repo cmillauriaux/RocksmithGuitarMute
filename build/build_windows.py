@@ -137,28 +137,40 @@ def get_python_dll_paths():
     if is_ci:
         print("DEBUG: Running in GitHub Actions CI environment")
     
-    # DLL Python principale
+    # DLL Python principale - recherche exhaustive
     python_version = f"python{sys.version_info.major}{sys.version_info.minor}"
-    python_dll = python_dir / f"{python_version}.dll"
     
-    if python_dll.exists():
-        python_dll_paths.append((str(python_dll), '.'))
-        print(f"DEBUG: Found main Python DLL: {python_dll}")
-    else:
-        print(f"DEBUG: Main Python DLL not found at: {python_dll}")
-        # Recherche alternative dans l'environnement CI
-        if is_ci:
-            # GitHub Actions peut avoir les DLL dans un autre répertoire
-            alt_locations = [
-                python_dir.parent / "DLLs" / f"{python_version}.dll",
-                Path(sys.base_prefix) / f"{python_version}.dll",
-                Path(sys.base_prefix) / "DLLs" / f"{python_version}.dll"
-            ]
-            for alt_dll in alt_locations:
-                if alt_dll.exists():
-                    python_dll_paths.append((str(alt_dll), '.'))
-                    print(f"DEBUG: Found alternative Python DLL: {alt_dll}")
+    # Emplacements possibles pour la DLL Python principale
+    possible_locations = [
+        python_dir / f"{python_version}.dll",
+        python_dir.parent / "DLLs" / f"{python_version}.dll",
+        Path(sys.base_prefix) / f"{python_version}.dll",
+        Path(sys.base_prefix) / "DLLs" / f"{python_version}.dll",
+        Path(sys.executable).parent / f"{python_version}.dll",
+        # Recherche dans System32 pour les installations système
+        Path(os.environ.get('SYSTEMROOT', 'C:\\Windows')) / "System32" / f"{python_version}.dll",
+    ]
+    
+    python_dll_found = False
+    for python_dll in possible_locations:
+        if python_dll.exists():
+            python_dll_paths.append((str(python_dll), '.'))
+            print(f"DEBUG: Found main Python DLL: {python_dll}")
+            python_dll_found = True
+            break
+    
+    if not python_dll_found:
+        print(f"WARNING: Main Python DLL {python_version}.dll not found in any location!")
+        # En dernier recours, chercher toute DLL python*.dll
+        for search_dir in [python_dir, python_dir.parent, Path(sys.base_prefix)]:
+            if search_dir.exists():
+                for dll_file in search_dir.rglob("python*.dll"):
+                    python_dll_paths.append((str(dll_file), '.'))
+                    print(f"DEBUG: Found fallback Python DLL: {dll_file}")
+                    python_dll_found = True
                     break
+            if python_dll_found:
+                break
     
     # DLLs dans le dossier DLLs
     dlls_dir = python_dir / "DLLs"
@@ -189,18 +201,59 @@ def get_python_dll_paths():
     system_dlls = [
         "vcruntime140.dll",
         "msvcp140.dll", 
-        "api-ms-win-crt-runtime-l1-1-0.dll"
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "ucrtbase.dll",
+        "kernel32.dll",
+        "user32.dll"
     ]
     
-    # Chercher dans System32
-    system32 = Path(os.environ.get('SYSTEMROOT', 'C:\\Windows')) / "System32"
+    # Chercher dans System32 et SysWOW64
+    system_dirs = [
+        Path(os.environ.get('SYSTEMROOT', 'C:\\Windows')) / "System32",
+        Path(os.environ.get('SYSTEMROOT', 'C:\\Windows')) / "SysWOW64"
+    ]
+    
     system_dll_count = 0
-    for dll_name in system_dlls:
-        dll_path = system32 / dll_name
-        if dll_path.exists():
-            python_dll_paths.append((str(dll_path), '.'))
-            system_dll_count += 1
+    for system_dir in system_dirs:
+        if system_dir.exists():
+            for dll_name in system_dlls:
+                dll_path = system_dir / dll_name
+                if dll_path.exists():
+                    python_dll_paths.append((str(dll_path), '.'))
+                    system_dll_count += 1
+                    break  # Prendre seulement la première occurrence
     print(f"DEBUG: Found {system_dll_count}/{len(system_dlls)} system DLLs")
+    
+    # Rechercher les DLL spécifiques à PyTorch et TorchAudio
+    try:
+        import torch
+        import torchaudio
+        
+        torch_dir = Path(torch.__file__).parent
+        torchaudio_dir = Path(torchaudio.__file__).parent
+        
+        # DLL PyTorch critiques
+        torch_dlls = []
+        for torch_lib_dir in [torch_dir / "lib", torch_dir / "bin", torch_dir]:
+            if torch_lib_dir.exists():
+                for dll_pattern in ["torch_cpu.dll", "torch_*.dll", "c10.dll", "fbgemm.dll"]:
+                    for dll_file in torch_lib_dir.glob(dll_pattern):
+                        torch_dlls.append((str(dll_file), '.'))
+                        print(f"DEBUG: Found PyTorch DLL: {dll_file.name}")
+        
+        # DLL TorchAudio critiques  
+        for torchaudio_lib_dir in [torchaudio_dir / "lib", torchaudio_dir / "bin", torchaudio_dir]:
+            if torchaudio_lib_dir.exists():
+                for dll_pattern in ["torchaudio*.dll", "sox*.dll"]:
+                    for dll_file in torchaudio_lib_dir.glob(dll_pattern):
+                        torch_dlls.append((str(dll_file), '.'))
+                        print(f"DEBUG: Found TorchAudio DLL: {dll_file.name}")
+        
+        python_dll_paths.extend(torch_dlls)
+        print(f"DEBUG: Found {len(torch_dlls)} PyTorch/TorchAudio DLLs")
+        
+    except ImportError:
+        print("DEBUG: PyTorch/TorchAudio not available for DLL detection")
     
     # Vérification finale
     total_dlls = len(python_dll_paths)
@@ -516,6 +569,11 @@ def build_executable(debug=False, onefile=False):
     
     if onefile:
         print("Mode onefile active (peut resoudre les problemes de DLL)")
+        
+        # Récupérer les DLL Python pour les inclure explicitement
+        python_dlls = get_python_dll_paths()
+        demucs_data = get_demucs_data_files()
+        
         # Pour onefile, utiliser directement PyInstaller sans .spec
         cmd = [
             sys.executable, '-m', 'PyInstaller',
@@ -530,48 +588,40 @@ def build_executable(debug=False, onefile=False):
             '--add-data', '../demucs/demucs;demucs',
             '--add-data', '../demucs/conf;demucs/conf',
             '--add-data', '../audio2wem_windows.py;.',
-            '--hidden-import', 'torch',
-            '--hidden-import', 'torchaudio',
-            '--hidden-import', 'demucs',
-            '--hidden-import', 'demucs.separate',
-            '--hidden-import', 'soundfile',
-            '--hidden-import', 'numpy',
-            '--hidden-import', 'tkinter',
-            '--hidden-import', 'tkinter.ttk',
-            '--hidden-import', 'tkinter.filedialog',
-            '--hidden-import', 'tkinter.messagebox',
-            '--hidden-import', 'rsrtools.files.welder',
-            '--hidden-import', 'rsrtools.files.config',
-            '--hidden-import', 'rsrtools.files.exceptions',
-                    '--hidden-import', 'torch.nn',
-        '--hidden-import', 'torch.nn.functional',
-        '--hidden-import', 'torch.optim',
-        '--hidden-import', 'torch.utils',
-        '--hidden-import', 'torch.utils.data',
-        '--hidden-import', 'torch._C',
-        '--hidden-import', 'torch._C._nn',
-        '--hidden-import', 'torch._C._fft',
-        '--hidden-import', 'torch._C._linalg',
-        '--hidden-import', 'torch._C._sparse',
-        '--hidden-import', 'torch.backends',
-        '--hidden-import', 'torch.backends.cpu',
-        '--hidden-import', 'torch.backends.mkl',
-        '--hidden-import', 'torch.backends.mkldnn',
-        '--hidden-import', 'torchaudio.transforms',
-        '--hidden-import', 'torchaudio.functional',
-        '--hidden-import', 'torchaudio.models',
-        '--hidden-import', 'torchaudio._extension',
-        '--hidden-import', 'torchaudio.io',
-            '--hidden-import', 'demucs.hdemucs',
-            '--hidden-import', 'demucs.htdemucs',
-            '--hidden-import', 'demucs.wdemucs',
-            '--hidden-import', 'demucs.transformer',
-            '--hidden-import', 'demucs.spec',
-            '--hidden-import', 'demucs.states',
-            '--hidden-import', 'demucs.utils',
-            '--hidden-import', 'demucs.wav',
-            '../gui/gui_main.py'
         ]
+        
+        # Ajouter les DLL Python explicitement
+        for dll_path, dest in python_dlls:
+            cmd.extend(['--add-binary', f'{dll_path};{dest}'])
+            
+        # Ajouter les données Demucs (y compris les modèles)
+        for data_path, dest in demucs_data:
+            cmd.extend(['--add-data', f'{data_path};{dest}'])
+        
+        # Hidden imports essentiels
+        hidden_imports = [
+            'torch', 'torchaudio', 'demucs', 'demucs.separate', 'demucs.pretrained',
+            'soundfile', 'numpy', 'scipy', 'tkinter', 'tkinter.ttk', 
+            'tkinter.filedialog', 'tkinter.messagebox',
+            'rsrtools.files.welder', 'rsrtools.files.config', 'rsrtools.files.exceptions',
+            'torch.nn', 'torch.nn.functional', 'torch.optim', 'torch.utils', 'torch.utils.data',
+            'torch._C', 'torch._C._nn', 'torch._C._fft', 'torch._C._linalg', 'torch._C._sparse',
+            'torch.backends', 'torch.backends.cpu', 'torch.backends.mkl', 'torch.backends.mkldnn',
+            'torchaudio.transforms', 'torchaudio.functional', 'torchaudio.models', 
+            'torchaudio._extension', 'torchaudio.io',
+            'demucs.hdemucs', 'demucs.htdemucs', 'demucs.wdemucs', 'demucs.transformer',
+            'demucs.spec', 'demucs.states', 'demucs.utils', 'demucs.wav', 'demucs.audio',
+            'demucs.repo', 'demucs.apply', 'demucs.api',
+            # Dépendances supplémentaires pour Demucs
+            'diffq', 'einops', 'julius', 'openunmix', 'tqdm', 'omegaconf',
+            'hydra', 'hydra.core', 'hydra.core.config_store', 'hydra.core.global_hydra',
+            'dora', 'lameenc', 'packaging', 'setuptools', 'pkg_resources'
+        ]
+        
+        for import_name in hidden_imports:
+            cmd.extend(['--hidden-import', import_name])
+        
+        cmd.append('../gui/gui_main.py')
     else:
         # Pour onedir, utiliser le fichier .spec
         cmd = [
