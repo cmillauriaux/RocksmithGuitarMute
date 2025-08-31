@@ -82,13 +82,14 @@ Tools for creating Rocksmith 2014 songlists and managing Rocksmith save files:
 - **Song lists**: Create and manage custom song lists
 
 ### RS-Utils
-Located in `./rs-utils/` (submodule from [v8187/rs-utils](https://github.com/v8187/rs-utils))
+Located in `./rs-utils/` (submodule from [0x0L/rs-utils](https://github.com/0x0L/rs-utils))
 
-Utility methods and functions for JavaScript and TypeScript projects:
+A collection of Python scripts for Rocksmith 2014:
 
-- **String utilities**: Text formatting and manipulation
-- **Helper functions**: Common utility functions
-- **TypeScript support**: Full TypeScript definitions
+- **audio2wem**: Convert audio files to Wwise WEM format
+- **psarc.py**: Pack, unpack and convert PSARC archives
+- **tones.py**: Extract tones from profile and PSARC files
+- **Additional tools**: Various utilities for Rocksmith 2014 file manipulation
 
 ## Requirements
 

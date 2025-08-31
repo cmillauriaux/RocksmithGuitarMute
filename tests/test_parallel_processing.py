@@ -12,6 +12,10 @@ This script shows:
 import time
 from pathlib import Path
 import logging
+import sys
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from rocksmith_guitar_mute import RocksmithGuitarMute
 
 def demo_output_checking():
