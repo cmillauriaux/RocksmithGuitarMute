@@ -423,6 +423,22 @@ hidden_imports = [
     'demucs.audio',
     'demucs.repo',
     'demucs.apply',
+    # Imports NumPy pour résoudre numpy.core.multiarray
+    'numpy.core',
+    'numpy.core.multiarray',
+    'numpy.core._multiarray_umath',
+    'numpy.core.multiarray_umath',
+    'numpy._typing',
+    'numpy._typing._array_like',
+    'numpy._typing._dtype_like',
+    'numpy.lib',
+    'numpy.lib.recfunctions',
+    'numpy.ma',
+    'numpy.ma.core',
+    'numpy.random',
+    'numpy.random._pickle',
+    'numpy.linalg',
+    'numpy.fft',
 ]
 
 # Exclusions pour réduire la taille (mais garder les dépendances essentielles)
@@ -446,7 +462,7 @@ a = Analysis(
     binaries=python_dlls,
     datas=project_datas + demucs_datas,
     hiddenimports=hidden_imports,
-    hookspath=[],
+    hookspath=['../hooks'],
     hooksconfig={{}},
     runtime_hooks=[],
     excludes=excludes,
