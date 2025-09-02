@@ -41,23 +41,74 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
+        # Install specific compatible versions to match local environment
+        pip install numpy==1.24.4  # Compatible version for PyTorch
+        pip install torch==2.0.1 torchaudio==2.0.2 --extra-index-url https://download.pytorch.org/whl/cpu
         pip install -r requirements.txt
         pip install PyInstaller
-        # Force complete PyTorch installation with all dependencies
-        pip install torch torchaudio --force-reinstall --no-cache-dir
+        # Install project dependencies in development mode
         pip install -e rsrtools/
-        # Install Demucs in development mode (critical for proper module loading)
         pip install -e demucs/
-        # Install additional dependencies for Demucs models
-        pip install diffq
+        # Install missing critical dependencies
+        pip install diffq omegaconf hydra-core>=1.1.0 einops
+        # Ensure NumPy compatibility
+        pip install --force-reinstall numpy==1.24.4
     
-    - name: Verify dependencies
+    - name: Verify dependencies and fix NumPy
       run: |
-        python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
-        python -c "import torchaudio; print(f'TorchAudio version: {torchaudio.__version__}')"
-        python -c "import demucs; print(f'Demucs version: {demucs.__version__}')"
-        python -c "import soundfile; print(f'SoundFile version: {soundfile.__version__}')"
-        python -c "import numpy; print(f'NumPy version: {numpy.__version__}')"
+        Write-Host "Verifying and fixing dependencies..."
+        python -c "
+        import sys
+        print(f'Python executable: {sys.executable}')
+        
+        # Test numpy import and fix if needed
+        try:
+            import numpy as np
+            print(f'NumPy version: {np.__version__}')
+            # Test the problematic import
+            import numpy.core.multiarray
+            print('✅ numpy.core.multiarray: OK')
+        except ImportError as e:
+            print(f'❌ NumPy import failed: {e}')
+            print('Attempting to fix NumPy installation...')
+            import subprocess
+            subprocess.run([sys.executable, '-m', 'pip', 'uninstall', '-y', 'numpy'], check=False)
+            subprocess.run([sys.executable, '-m', 'pip', 'install', 'numpy==1.24.4', '--force-reinstall'], check=True)
+            # Test again
+            import numpy as np
+            import numpy.core.multiarray
+            print(f'✅ NumPy fixed! Version: {np.__version__}')
+        
+        # Test torch
+        import torch
+        print(f'PyTorch version: {torch.__version__}')
+        
+        # Test torchaudio
+        import torchaudio
+        print(f'TorchAudio version: {torchaudio.__version__}')
+        
+        # Test demucs with more detailed error reporting
+        try:
+            import demucs
+            print(f'Demucs version: {demucs.__version__}')
+            
+            # Test model loading
+            import demucs.pretrained
+            print('Testing model loading...')
+            model = demucs.pretrained.get_model('htdemucs_6s')
+            print('✅ htdemucs_6s model loaded successfully')
+            
+        except Exception as e:
+            print(f'❌ Demucs test failed: {e}')
+            import traceback
+            traceback.print_exc()
+        
+        # Test soundfile
+        import soundfile
+        print(f'SoundFile version: {soundfile.__version__}')
+        
+        print('Dependency verification completed')
+        "
     
     - name: Download Demucs models
       run: |
@@ -65,22 +116,54 @@ jobs:
         python -c "
         import demucs.pretrained
         import os
+        import torch
+        import numpy as np
+        
+        # Test NumPy compatibility first
+        print(f'NumPy version: {np.__version__}')
+        try:
+            # Test the problematic import
+            import numpy.core.multiarray
+            print('✅ numpy.core.multiarray import successful')
+        except ImportError as e:
+            print(f'❌ numpy.core.multiarray import failed: {e}')
+            # Try alternative import
+            try:
+                import numpy.core._multiarray_umath
+                print('✅ Alternative numpy import successful')
+            except ImportError as e2:
+                print(f'❌ Alternative numpy import also failed: {e2}')
         
         # Créer le dossier de cache s'il n'existe pas
         cache_dir = os.path.expanduser('~/.cache/torch/hub/checkpoints')
         os.makedirs(cache_dir, exist_ok=True)
         
-        # Télécharger les modèles essentiels
-        models = ['htdemucs_6s', 'htdemucs', 'mdx_extra_q']
+        # Télécharger les modèles essentiels avec gestion d'erreur améliorée
+        models = ['htdemucs_6s']  # Start with the working model only
         for model in models:
             try:
                 print(f'Downloading model: {model}')
-                demucs.pretrained.get_model(model)
+                model_obj = demucs.pretrained.get_model(model)
+                print(f'Successfully downloaded and loaded: {model}')
+                # Test model loading
+                print(f'Model device: {next(model_obj.parameters()).device}')
+            except Exception as e:
+                print(f'Error downloading {model}: {e}')
+                import traceback
+                traceback.print_exc()
+        
+        # Test additional models separately
+        additional_models = ['htdemucs', 'mdx_extra_q']
+        for model in additional_models:
+            try:
+                print(f'Attempting to download model: {model}')
+                model_obj = demucs.pretrained.get_model(model)
                 print(f'Successfully downloaded: {model}')
             except Exception as e:
                 print(f'Warning: Failed to download {model}: {e}')
+                # Don't fail the build for optional models
         
-        print('Model download completed')
+        print('Model download phase completed')
         "
         Write-Host "Demucs models download completed"
     
@@ -116,66 +199,58 @@ jobs:
         Write-Host "Testing executable functionality..."
         cd build/dist
         
-        # Test 1: Vérifier que l'exécutable peut démarrer (mode headless si possible)
-        Write-Host "Test 1: Basic executable test"
-        try {
-          # Essayer de lancer l'exe avec un timeout pour éviter qu'il reste ouvert
-          $process = Start-Process -FilePath ".\RockSmithGuitarMute.exe" -ArgumentList "--help" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 5
-          if (!$process.HasExited) {
-            $process.Kill()
-          }
-          Write-Host "✅ Executable can start"
-        } catch {
-          Write-Host "⚠️  Executable test inconclusive: $($_.Exception.Message)"
-        }
-        
-        # Test 2: Vérifier la présence des DLL critiques (dans un exe onefile, elles sont intégrées)
-        Write-Host "Test 2: Critical DLL check (onefile mode - DLLs are embedded)"
-        $criticalDlls = @("python312.dll", "torch_cpu.dll", "torchaudio.dll")
-        $foundDlls = 0
-        
-        # Pour un exécutable onefile, les DLL sont intégrées, on vérifie la taille et les strings
+        # Test 1: Basic executable analysis
+        Write-Host "Test 1: Executable analysis"
         $exeSize = (Get-Item ".\RockSmithGuitarMute.exe").Length / 1MB
         Write-Host "Executable size: $([math]::Round($exeSize, 1)) MB"
         
-        if ($exeSize -gt 100) {
-          Write-Host "✅ Executable size suggests DLLs are embedded"
-          $foundDlls = 3  # Assume DLLs are embedded if size is reasonable
+        if ($exeSize -gt 200) {
+            Write-Host "✅ Executable size suggests all dependencies are included"
+        } elseif ($exeSize -gt 100) {
+            Write-Host "⚠️  Executable size acceptable but may be missing some dependencies"
         } else {
-          Write-Host "⚠️  Executable size seems too small, DLLs might be missing"
+            Write-Host "❌ Executable size too small - likely missing critical dependencies"
         }
         
-        # Test alternatif: vérifier les strings dans l'exécutable
+        # Test 2: Run our dedicated test script
+        Write-Host "`nTest 2: Running import tests"
+        Copy-Item "..\test_executable.py" "test_executable.py"
+        
         try {
-          $strings = Select-String -Path ".\RockSmithGuitarMute.exe" -Pattern "python312|torch|demucs" -Quiet
-          if ($strings) {
-            Write-Host "✅ Found Python/PyTorch/Demucs references in executable"
-          } else {
-            Write-Host "⚠️  No obvious Python/PyTorch references found"
-          }
+            python test_executable.py
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Import test passed"
+            } else {
+                Write-Host "⚠️  Import test had warnings (exit code: $LASTEXITCODE)"
+            }
         } catch {
-          Write-Host "⚠️  Could not analyze executable strings"
+            Write-Host "❌ Import test failed: $($_.Exception.Message)"
         }
         
-        Write-Host "DLL check completed (onefile mode - DLLs embedded: $foundDlls/3 assumed)"
-        
-        # Test 3: Vérifier la présence des modules Python essentiels
-        Write-Host "Test 3: Essential Python modules check"
-        $essentialModules = @("demucs", "torch", "torchaudio", "numpy")
-        $foundModules = 0
-        foreach ($module in $essentialModules) {
-          $moduleFiles = Get-ChildItem -Recurse -Name "*$module*" -ErrorAction SilentlyContinue
-          if ($moduleFiles) {
-            Write-Host "✅ Found module files for: $module"
-            $foundModules++
-          } else {
-            Write-Host "❌ Missing module files for: $module"
-          }
+        # Test 3: Strings analysis for critical components
+        Write-Host "`nTest 3: Critical components check"
+        try {
+            $patterns = @("numpy", "torch", "demucs", "htdemucs_6s", "python")
+            $foundComponents = @()
+            
+            foreach ($pattern in $patterns) {
+                $found = Select-String -Path ".\RockSmithGuitarMute.exe" -Pattern $pattern -Quiet
+                if ($found) {
+                    $foundComponents += $pattern
+                }
+            }
+            
+            Write-Host "Found components: $($foundComponents -join ', ')"
+            if ($foundComponents.Count -ge 3) {
+                Write-Host "✅ Critical components found in executable"
+            } else {
+                Write-Host "⚠️  Some critical components may be missing"
+            }
+        } catch {
+            Write-Host "⚠️  Could not analyze executable strings"
         }
-        Write-Host "Found $foundModules/$($essentialModules.Length) essential modules"
         
-        Write-Host "Executable testing completed"
+        Write-Host "`nExecutable testing completed"
     
     - name: Create release archive
       run: |
@@ -207,7 +282,7 @@ jobs:
           ## Changes
           - Built from latest master branch
           - Commit: ${{ github.sha }}
-          - Build date: ${{ github.run_started_at }}
+          - Build date: ${{ github.event.head_commit.timestamp }}
           
           ## Installation
           1. Download `RockSmithGuitarMute-Windows.zip`

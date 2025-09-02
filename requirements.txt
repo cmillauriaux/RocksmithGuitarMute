@@ -1,12 +1,13 @@
 # Core dependencies for RockSmith Guitar Mute
-torch>=2.0.0
-torchaudio>=2.0.0
-demucs
+# Fixed versions for better compatibility between local and CI environments
+torch>=2.0.0,<2.1.0
+torchaudio>=2.0.0,<2.1.0
+numpy==1.24.4  # Fixed version to avoid numpy.core.multiarray issues
+demucs>=4.0.0,<4.1.0
 soundfile>=0.12.0
-numpy>=1.21.0
+cffi>=1.0
 
 # Critical PyTorch/Demucs dependencies (missing from auto-install)
-cffi>=1.0
 filelock>=3.0
 fsspec>=2024.0
 jinja2>=3.0
@@ -31,8 +32,10 @@ pydantic>=2.6.1
 
 # Additional demucs dependencies
 einops
+diffq  # Critical for some Demucs models
+omegaconf>=2.0.0  # Critical for Demucs configuration
 hydra-colorlog>=1.1
-hydra-core>=1.1
+hydra-core>=1.1.0
 julius>=0.2.3
 pyyaml
 tqdm

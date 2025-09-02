@@ -441,22 +441,22 @@ hidden_imports = [
     'numpy.fft',
 ]
 
-# Exclusions pour réduire la taille (mais garder les dépendances essentielles)
-excludes = [
-    'matplotlib',
-    'IPython',
-    'jupyter',
-    'notebook',
-    'pandas',
-    'sklearn',
-    'cv2',
-    'PIL',
-    'pytest',
-    # Ne pas exclure setuptools car PyTorch en a besoin
-    # 'setuptools',
-]
-
-a = Analysis(
+            # Exclusions pour réduire la taille (mais garder les dépendances essentielles)
+        excludes = [
+            'matplotlib',
+            'IPython',
+            'jupyter',
+            'notebook',
+            'pandas',
+            'sklearn',
+            'cv2',
+            'PIL',
+            'pytest',
+            # Ne pas exclure setuptools car PyTorch en a besoin
+            # 'setuptools',
+            # Ne pas exclure numpy.core - critique pour le fix CI
+            # 'numpy.core',
+        ]a = Analysis(
     ['../gui/gui_main.py'],
     pathex=['..'],
     binaries=python_dlls,
@@ -550,7 +550,7 @@ def build_executable(debug=False, onefile=False):
         for data_path, dest in demucs_data:
             cmd.extend(['--add-data', f'{data_path};{dest}'])
         
-        # Hidden imports essentiels
+        # Hidden imports essentiels avec focus sur NumPy
         hidden_imports = [
             'torch', 'torchaudio', 'demucs', 'demucs.separate', 'demucs.pretrained',
             'soundfile', 'numpy', 'scipy', 'tkinter', 'tkinter.ttk', 
@@ -564,10 +564,20 @@ def build_executable(debug=False, onefile=False):
             'demucs.hdemucs', 'demucs.htdemucs', 'demucs.wdemucs', 'demucs.transformer',
             'demucs.spec', 'demucs.states', 'demucs.utils', 'demucs.wav', 'demucs.audio',
             'demucs.repo', 'demucs.apply', 'demucs.api',
+            # Fix critique pour NumPy dans l'environnement CI
+            'numpy.core', 'numpy.core.multiarray', 'numpy.core._multiarray_umath',
+            'numpy.core.multiarray_umath', 'numpy.core.numeric', 'numpy.core.umath',
+            'numpy._typing', 'numpy._typing._array_like', 'numpy._typing._dtype_like',
+            'numpy.lib', 'numpy.lib.recfunctions', 'numpy.ma', 'numpy.ma.core',
+            'numpy.random', 'numpy.random._pickle', 'numpy.linalg', 'numpy.fft',
+            'numpy.core._methods', 'numpy.core.arrayprint', 'numpy.core.fromnumeric',
+            'numpy.core.function_base', 'numpy.core.getlimits', 'numpy.core.shape_base',
             # Dépendances supplémentaires pour Demucs
             'diffq', 'einops', 'julius', 'openunmix', 'tqdm', 'omegaconf',
             'hydra', 'hydra.core', 'hydra.core.config_store', 'hydra.core.global_hydra',
-            'dora', 'lameenc', 'packaging', 'setuptools', 'pkg_resources'
+            'dora', 'lameenc', 'packaging', 'setuptools', 'pkg_resources',
+            # Imports supplémentaires pour résoudre les erreurs CI
+            'typing_extensions', 'importlib_metadata', 'importlib_resources'
         ]
         
         for import_name in hidden_imports:
