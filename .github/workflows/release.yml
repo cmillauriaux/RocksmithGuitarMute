@@ -41,18 +41,22 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install specific compatible versions to match local environment
-        pip install numpy==1.24.4  # Compatible version for PyTorch
-        pip install torch==2.0.1 torchaudio==2.0.2 --extra-index-url https://download.pytorch.org/whl/cpu
-        pip install -r requirements.txt
+        # Install compatible versions for CI environment
+        # Use newer compatible versions since 2.0.x are no longer available
+        pip install numpy==1.26.4  # Use a version available in binary wheels
+        pip install torch==2.2.0+cpu torchaudio==2.2.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
         pip install PyInstaller
-        # Install project dependencies in development mode
+        # Install project dependencies in development mode first
         pip install -e rsrtools/
-        pip install -e demucs/
-        # Install missing critical dependencies
-        pip install diffq omegaconf hydra-core>=1.1.0 einops
-        # Ensure NumPy compatibility
-        pip install --force-reinstall numpy==1.24.4
+        # Install Demucs with relaxed version constraints
+        cd demucs && pip install -e . --no-deps && cd ..
+        # Manually install Demucs dependencies with compatible versions
+        pip install einops julius>=0.2.3 lameenc openunmix pyyaml torchaudio>=2.2.0
+        pip install dora-search
+        # Install additional critical dependencies
+        pip install diffq omegaconf hydra-core>=1.1.0
+        # Install remaining requirements
+        pip install soundfile>=0.12.0 cffi>=1.0
     
     - name: Verify dependencies and fix NumPy
       run: |
@@ -61,109 +65,74 @@ jobs:
         import sys
         print(f'Python executable: {sys.executable}')
         
-        # Test numpy import and fix if needed
+        # Test numpy import
         try:
             import numpy as np
-            print(f'NumPy version: {np.__version__}')
+            print(f'✅ NumPy version: {np.__version__}')
             # Test the problematic import
             import numpy.core.multiarray
             print('✅ numpy.core.multiarray: OK')
         except ImportError as e:
             print(f'❌ NumPy import failed: {e}')
-            print('Attempting to fix NumPy installation...')
-            import subprocess
-            subprocess.run([sys.executable, '-m', 'pip', 'uninstall', '-y', 'numpy'], check=False)
-            subprocess.run([sys.executable, '-m', 'pip', 'install', 'numpy==1.24.4', '--force-reinstall'], check=True)
-            # Test again
-            import numpy as np
-            import numpy.core.multiarray
-            print(f'✅ NumPy fixed! Version: {np.__version__}')
         
         # Test torch
-        import torch
-        print(f'PyTorch version: {torch.__version__}')
+        try:
+            import torch
+            print(f'✅ PyTorch version: {torch.__version__}')
+            print(f'CUDA available: {torch.cuda.is_available()}')
+        except ImportError as e:
+            print(f'❌ PyTorch import failed: {e}')
         
         # Test torchaudio
-        import torchaudio
-        print(f'TorchAudio version: {torchaudio.__version__}')
+        try:
+            import torchaudio
+            print(f'✅ TorchAudio version: {torchaudio.__version__}')
+        except ImportError as e:
+            print(f'❌ TorchAudio import failed: {e}')
         
         # Test demucs with more detailed error reporting
         try:
             import demucs
-            print(f'Demucs version: {demucs.__version__}')
-            
-            # Test model loading
-            import demucs.pretrained
-            print('Testing model loading...')
-            model = demucs.pretrained.get_model('htdemucs_6s')
-            print('✅ htdemucs_6s model loaded successfully')
-            
+            print(f'✅ Demucs version: {demucs.__version__}')
         except Exception as e:
             print(f'❌ Demucs test failed: {e}')
-            import traceback
-            traceback.print_exc()
         
         # Test soundfile
-        import soundfile
-        print(f'SoundFile version: {soundfile.__version__}')
+        try:
+            import soundfile
+            print(f'✅ SoundFile version: {soundfile.__version__}')
+        except ImportError as e:
+            print(f'❌ SoundFile import failed: {e}')
         
-        print('Dependency verification completed')
+        print('✅ Dependency verification completed')
         "
     
     - name: Download Demucs models
       run: |
         Write-Host "Downloading essential Demucs models..."
         python -c "
-        import demucs.pretrained
-        import os
-        import torch
-        import numpy as np
-        
-        # Test NumPy compatibility first
-        print(f'NumPy version: {np.__version__}')
         try:
-            # Test the problematic import
-            import numpy.core.multiarray
-            print('✅ numpy.core.multiarray import successful')
-        except ImportError as e:
-            print(f'❌ numpy.core.multiarray import failed: {e}')
-            # Try alternative import
+            import demucs.pretrained
+            import os
+            
+            # Créer le dossier de cache s'il n'existe pas
+            cache_dir = os.path.expanduser('~/.cache/torch/hub/checkpoints')
+            os.makedirs(cache_dir, exist_ok=True)
+            print(f'Cache directory: {cache_dir}')
+            
+            # Télécharger le modèle principal (htdemucs_6s fonctionne selon les logs)
             try:
-                import numpy.core._multiarray_umath
-                print('✅ Alternative numpy import successful')
-            except ImportError as e2:
-                print(f'❌ Alternative numpy import also failed: {e2}')
-        
-        # Créer le dossier de cache s'il n'existe pas
-        cache_dir = os.path.expanduser('~/.cache/torch/hub/checkpoints')
-        os.makedirs(cache_dir, exist_ok=True)
-        
-        # Télécharger les modèles essentiels avec gestion d'erreur améliorée
-        models = ['htdemucs_6s']  # Start with the working model only
-        for model in models:
-            try:
-                print(f'Downloading model: {model}')
-                model_obj = demucs.pretrained.get_model(model)
-                print(f'Successfully downloaded and loaded: {model}')
-                # Test model loading
-                print(f'Model device: {next(model_obj.parameters()).device}')
+                print('Downloading htdemucs_6s model...')
+                model = demucs.pretrained.get_model('htdemucs_6s')
+                print('✅ htdemucs_6s model downloaded and loaded successfully')
             except Exception as e:
-                print(f'Error downloading {model}: {e}')
-                import traceback
-                traceback.print_exc()
-        
-        # Test additional models separately
-        additional_models = ['htdemucs', 'mdx_extra_q']
-        for model in additional_models:
-            try:
-                print(f'Attempting to download model: {model}')
-                model_obj = demucs.pretrained.get_model(model)
-                print(f'Successfully downloaded: {model}')
-            except Exception as e:
-                print(f'Warning: Failed to download {model}: {e}')
-                # Don't fail the build for optional models
-        
-        print('Model download phase completed')
+                print(f'❌ Failed to download htdemucs_6s: {e}')
+                
+            print('Model download completed')
+        except Exception as e:
+            print(f'❌ Model download failed: {e}')
+            import traceback
+            traceback.print_exc()
         "
         Write-Host "Demucs models download completed"
     

@@ -1,21 +1,19 @@
 # Core dependencies for RockSmith Guitar Mute
-# Fixed versions for better compatibility between local and CI environments
-torch>=2.0.0,<2.1.0
-torchaudio>=2.0.0,<2.1.0
-numpy==1.24.4  # Fixed version to avoid numpy.core.multiarray issues
-demucs>=4.0.0,<4.1.0
+# Updated versions for CI compatibility
+torch>=2.2.0
+torchaudio>=2.2.0
+numpy>=1.24.0  # Use available binary wheels
+demucs>=4.0.0
 soundfile>=0.12.0
 cffi>=1.0
 
-# Critical PyTorch/Demucs dependencies (missing from auto-install)
+# Critical PyTorch/Demucs dependencies
 filelock>=3.0
-fsspec>=2024.0
+fsspec
 jinja2>=3.0
 markupsafe>=2.0
 mpmath>=1.0
 networkx>=3.0
-protobuf>=4.0
-safetensors>=0.4
 sympy>=1.13
 pillow>=10.0
 
@@ -32,22 +30,22 @@ pydantic>=2.6.1
 
 # Additional demucs dependencies
 einops
-diffq  # Critical for some Demucs models
-omegaconf>=2.0.0  # Critical for Demucs configuration
+diffq
+omegaconf>=2.0.0
 hydra-colorlog>=1.1
 hydra-core>=1.1.0
 julius>=0.2.3
 pyyaml
 tqdm
+dora-search
+lameenc>=1.2
+openunmix
 
 # GUI dependencies
 # tkinter is included with Python, no need to install separately
 
 # Build dependencies for standalone executable
 pyinstaller>=5.0.0
-
-# Optional: CUDA support (install separately if needed)
-# torch[cuda] for GPU acceleration
 
 # Development dependencies (optional)
 pytest>=7.0.0

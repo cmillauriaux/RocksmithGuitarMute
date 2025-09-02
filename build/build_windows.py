@@ -550,7 +550,7 @@ def build_executable(debug=False, onefile=False):
         for data_path, dest in demucs_data:
             cmd.extend(['--add-data', f'{data_path};{dest}'])
         
-        # Hidden imports essentiels avec focus sur NumPy
+        # Hidden imports essentiels avec focus sur la compatibilité CI
         hidden_imports = [
             'torch', 'torchaudio', 'demucs', 'demucs.separate', 'demucs.pretrained',
             'soundfile', 'numpy', 'scipy', 'tkinter', 'tkinter.ttk', 
@@ -564,7 +564,7 @@ def build_executable(debug=False, onefile=False):
             'demucs.hdemucs', 'demucs.htdemucs', 'demucs.wdemucs', 'demucs.transformer',
             'demucs.spec', 'demucs.states', 'demucs.utils', 'demucs.wav', 'demucs.audio',
             'demucs.repo', 'demucs.apply', 'demucs.api',
-            # Fix critique pour NumPy dans l'environnement CI
+            # NumPy imports essentiels
             'numpy.core', 'numpy.core.multiarray', 'numpy.core._multiarray_umath',
             'numpy.core.multiarray_umath', 'numpy.core.numeric', 'numpy.core.umath',
             'numpy._typing', 'numpy._typing._array_like', 'numpy._typing._dtype_like',
@@ -572,12 +572,14 @@ def build_executable(debug=False, onefile=False):
             'numpy.random', 'numpy.random._pickle', 'numpy.linalg', 'numpy.fft',
             'numpy.core._methods', 'numpy.core.arrayprint', 'numpy.core.fromnumeric',
             'numpy.core.function_base', 'numpy.core.getlimits', 'numpy.core.shape_base',
-            # Dépendances supplémentaires pour Demucs
+            # Dépendances Demucs pour CI
             'diffq', 'einops', 'julius', 'openunmix', 'tqdm', 'omegaconf',
             'hydra', 'hydra.core', 'hydra.core.config_store', 'hydra.core.global_hydra',
             'dora', 'lameenc', 'packaging', 'setuptools', 'pkg_resources',
-            # Imports supplémentaires pour résoudre les erreurs CI
-            'typing_extensions', 'importlib_metadata', 'importlib_resources'
+            'dora_search',  # Nouvelle dépendance Demucs
+            # Imports supplémentaires pour éviter les erreurs CI
+            'typing_extensions', 'importlib_metadata', 'importlib_resources',
+            'antlr4', 'antlr4.tree', 'antlr4.error',  # Pour omegaconf
         ]
         
         for import_name in hidden_imports:
