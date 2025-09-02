@@ -24,6 +24,12 @@ class RocksmithGuitarMuteGUI:
     """Graphical interface for RockSmith Guitar Mute."""
     
     def __init__(self):
+        # Setup logging for GUI
+        gui_log_file = Path("RockSmithGuitarMute_GUI.log")
+        setup_logging(verbose=True, log_file=str(gui_log_file))
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Initializing RockSmith Guitar Mute GUI")
+        
         self.root = tk.Tk()
         self.root.title("RockSmith Guitar Mute - Graphical Interface")
         self.root.geometry("800x600")

@@ -22,11 +22,13 @@ import asyncio
 import logging
 import multiprocessing
 import os
+import platform
 import shutil
 import subprocess
 import sys
 import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -307,11 +309,21 @@ class RocksmithGuitarMute:
             
             # Load separated stems
             stems = {}
+            sr = None  # Initialize sample rate
             for stem_file in stems_dir.glob("*.wav"):
                 stem_name = stem_file.stem
-                audio, sr = torchaudio.load(str(stem_file))
+                audio, current_sr = torchaudio.load(str(stem_file))
                 stems[stem_name] = audio
+                if sr is None:
+                    sr = current_sr  # Use the first file's sample rate
                 self.logger.debug(f"Loaded stem: {stem_name}")
+            
+            # Check if we found any stems
+            if not stems:
+                raise FileNotFoundError(f"No audio stems found in: {stems_dir}")
+            
+            if sr is None:
+                raise ValueError("Could not determine sample rate from audio files")
             
             # For htdemucs_6s model, exclude the guitar stem specifically
             backing_stems = []
@@ -350,6 +362,10 @@ class RocksmithGuitarMute:
                 
                 if backing_track is None:
                     raise ValueError("No suitable stems found for backing track")
+            
+            # Ensure backing_track is not None before saving
+            if backing_track is None:
+                raise ValueError("Failed to create backing track - no audio data available")
             
             # Save the backing track
             torchaudio.save(str(output_path), backing_track, sr)
@@ -484,7 +500,10 @@ class RocksmithGuitarMute:
         Returns:
             Path to the processed PSARC file or None if skipped
         """
-        self.logger.info(f"Processing PSARC file: {psarc_path}")
+        self.logger.info(f"Starting PSARC processing: {psarc_path}")
+        self.logger.debug(f"Input file size: {psarc_path.stat().st_size} bytes")
+        self.logger.debug(f"Output directory: {output_dir}")
+        self.logger.debug(f"Force processing: {force}")
         
         output_dir.mkdir(parents=True, exist_ok=True)
         output_psarc = output_dir / psarc_path.name
@@ -646,17 +665,205 @@ def process_single_psarc_worker(args_tuple: Tuple[Path, Path, str, str, bool]) -
         return None
 
 
-def setup_logging(verbose: bool = False) -> None:
-    """Setup logging configuration."""
+def setup_logging(verbose: bool = False, log_file: str = None) -> None:
+    """Setup logging configuration with detailed diagnostic logging."""
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler('rocksmith_guitar_mute.log')
-        ]
+    
+    # Determine log file path
+    if log_file is None:
+        # If running as executable, place log next to executable
+        if getattr(sys, 'frozen', False):
+            # Running as PyInstaller executable
+            exe_path = Path(sys.executable)
+            log_file = exe_path.with_suffix('.log')
+        else:
+            # Running as script
+            log_file = Path('rocksmith_guitar_mute.log')
+    else:
+        log_file = Path(log_file)
+    
+    # Create detailed formatter
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
+    
+    console_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    
+    # Setup handlers
+    handlers = []
+    
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(console_formatter)
+    handlers.append(console_handler)
+    
+    # File handler with detailed logging (always DEBUG level)
+    try:
+        file_handler = logging.FileHandler(str(log_file), mode='w', encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(detailed_formatter)
+        handlers.append(file_handler)
+        print(f"Detailed logging enabled: {log_file}")
+    except Exception as e:
+        print(f"Warning: Could not create log file {log_file}: {e}")
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=logging.DEBUG,  # Always DEBUG for file logging
+        handlers=handlers,
+        force=True
+    )
+    
+    # Log system information at startup
+    _log_system_info(log_file)
+
+
+def _log_system_info(log_file: Path) -> None:
+    """Log detailed system information for diagnostic purposes."""
+    logger = logging.getLogger(__name__)
+    
+    logger.info("=" * 80)
+    logger.info("ROCKSMITH GUITAR MUTE - SYSTEM DIAGNOSTIC LOG")
+    logger.info("=" * 80)
+    
+    # Basic system info
+    logger.info(f"Log file: {log_file}")
+    logger.info(f"Timestamp: {datetime.now().isoformat()}")
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"Python executable: {sys.executable}")
+    logger.info(f"Platform: {platform.platform()}")
+    logger.info(f"Architecture: {platform.architecture()}")
+    logger.info(f"Machine: {platform.machine()}")
+    logger.info(f"Processor: {platform.processor()}")
+    
+    # PyInstaller info
+    if getattr(sys, 'frozen', False):
+        logger.info("Running as PyInstaller executable")
+        logger.info(f"Executable path: {sys.executable}")
+        logger.info(f"Bundled path: {getattr(sys, '_MEIPASS', 'Not available')}")
+    else:
+        logger.info("Running as Python script")
+        logger.info(f"Script path: {__file__}")
+    
+    # Environment variables
+    logger.info("Environment variables:")
+    for key in ['PATH', 'PYTHONPATH', 'HOME', 'USERPROFILE', 'TEMP', 'TMP']:
+        value = os.environ.get(key, 'Not set')
+        logger.info(f"  {key}: {value}")
+    
+    # Working directory
+    logger.info(f"Current working directory: {os.getcwd()}")
+    
+    # Python path
+    logger.info("Python sys.path:")
+    for i, path in enumerate(sys.path):
+        logger.info(f"  [{i}]: {path}")
+    
+    # Memory info
+    try:
+        import psutil
+        memory = psutil.virtual_memory()
+        logger.info(f"Total memory: {memory.total / (1024**3):.2f} GB")
+        logger.info(f"Available memory: {memory.available / (1024**3):.2f} GB")
+        logger.info(f"Memory usage: {memory.percent}%")
+    except ImportError:
+        logger.info("psutil not available - memory info not logged")
+    
+    # Check critical libraries
+    logger.info("Checking critical libraries:")
+    critical_libs = [
+        ('torch', 'PyTorch for AI processing'),
+        ('torchaudio', 'TorchAudio for audio processing'),
+        ('demucs', 'Demucs for source separation'),
+        ('soundfile', 'SoundFile for audio I/O'),
+        ('numpy', 'NumPy for numerical processing'),
+        ('rsrtools', 'RSRTools for PSARC handling'),
+    ]
+    
+    for lib_name, description in critical_libs:
+        try:
+            lib = __import__(lib_name)
+            version = getattr(lib, '__version__', 'Unknown version')
+            location = getattr(lib, '__file__', 'Unknown location')
+            logger.info(f"  ✅ {lib_name} ({description}): v{version}")
+            logger.debug(f"     Location: {location}")
+        except ImportError as e:
+            logger.error(f"  ❌ {lib_name} ({description}): MISSING - {e}")
+        except Exception as e:
+            logger.warning(f"  ⚠️  {lib_name} ({description}): ERROR - {e}")
+    
+    # PyTorch specific info
+    try:
+        import torch
+        logger.info("PyTorch configuration:")
+        logger.info(f"  CUDA available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            logger.info(f"  CUDA version: {torch.version.cuda}")
+            logger.info(f"  GPU count: {torch.cuda.device_count()}")
+            for i in range(torch.cuda.device_count()):
+                gpu_name = torch.cuda.get_device_name(i)
+                logger.info(f"    GPU {i}: {gpu_name}")
+        logger.info(f"  CPU threads: {torch.get_num_threads()}")
+    except Exception as e:
+        logger.error(f"Error getting PyTorch info: {e}")
+    
+    # Demucs models info
+    try:
+        import demucs.pretrained
+        logger.info("Checking Demucs models:")
+        models_to_check = ['htdemucs_6s', 'htdemucs', 'mdx_extra_q']
+        for model_name in models_to_check:
+            try:
+                model = demucs.pretrained.get_model(model_name)
+                logger.info(f"  ✅ {model_name}: Available")
+            except Exception as e:
+                logger.warning(f"  ⚠️  {model_name}: Not available - {e}")
+    except Exception as e:
+        logger.error(f"Error checking Demucs models: {e}")
+    
+    # File system info
+    logger.info("File system information:")
+    try:
+        project_root = find_project_root()
+        logger.info(f"Project root: {project_root}")
+        
+        # Check for key directories/files
+        key_paths = [
+            'rs-utils',
+            'rsrtools',
+            'demucs',
+            'gui',
+            'input',
+            'output',
+            'requirements.txt'
+        ]
+        
+        for path_name in key_paths:
+            full_path = project_root / path_name
+            if full_path.exists():
+                if full_path.is_dir():
+                    try:
+                        file_count = len(list(full_path.iterdir()))
+                        logger.info(f"  ✅ {path_name}/: Directory exists ({file_count} items)")
+                    except:
+                        logger.info(f"  ✅ {path_name}/: Directory exists (cannot count items)")
+                else:
+                    size = full_path.stat().st_size
+                    logger.info(f"  ✅ {path_name}: File exists ({size} bytes)")
+            else:
+                logger.warning(f"  ❌ {path_name}: Missing")
+                
+    except Exception as e:
+        logger.error(f"Error checking file system: {e}")
+    
+    logger.info("=" * 80)
+    logger.info("END OF SYSTEM DIAGNOSTIC")
+    logger.info("=" * 80)
 
 
 def main():
@@ -729,9 +936,18 @@ Examples:
     
     args = parser.parse_args()
     
-    # Setup logging
+    # Setup logging first thing
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
+    
+    # Setup global exception handler
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    
+    sys.excepthook = handle_exception
     
     try:
         # Validate inputs
