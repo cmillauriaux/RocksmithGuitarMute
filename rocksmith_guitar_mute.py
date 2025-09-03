@@ -162,7 +162,8 @@ class RocksmithGuitarMute:
             cwd=cwd or Path.cwd(),
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         )
         
         if result.returncode != 0:
@@ -247,12 +248,19 @@ class RocksmithGuitarMute:
         
         subprocess.run(
             [str(ww2ogg), str(wem_path), "-o", str(temp_ogg), "--pcb", str(packed_codebooks)], 
-            check=True
+            check=True,
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         )
         
         # Try revorb for better compatibility
         try:
-            subprocess.run([str(revorb), str(temp_ogg)], check=True)
+            subprocess.run(
+                [str(revorb), str(temp_ogg)], 
+                check=True,
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
             self.logger.info("revorb processing completed successfully")
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"revorb failed (code {e.returncode}), continuing with ww2ogg output")

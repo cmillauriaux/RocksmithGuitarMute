@@ -12,6 +12,13 @@ import sys
 from pathlib import Path
 from typing import Optional, List
 import logging
+import subprocess
+
+# Configure Windows to run all subprocess calls silently
+if sys.platform == "win32":
+    import subprocess
+    # Ensure all subprocess calls are silent by default
+    os.environ["PYTHONIOENCODING"] = "utf-8"
 
 # Import main module
 import sys

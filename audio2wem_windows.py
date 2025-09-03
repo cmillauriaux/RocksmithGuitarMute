@@ -16,6 +16,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+# Import subprocess constants for Windows
+if sys.platform == "win32":
+    import subprocess
+
 
 def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
     """
@@ -86,7 +90,12 @@ def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
     
     # Check FFmpeg
     try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        subprocess.run(
+            ["ffmpeg", "-version"], 
+            capture_output=True, 
+            check=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("Error: FFmpeg not found. Please install FFmpeg and add it to PATH.")
         return False
@@ -114,7 +123,12 @@ def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
                 str(song_wav)
             ]
             
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+            result = subprocess.run(
+                ffmpeg_cmd, 
+                capture_output=True, 
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
             if result.returncode != 0:
                 print(f"FFmpeg failed: {result.stderr}")
                 return False
@@ -137,7 +151,12 @@ def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
                     wwise_cmd = ["sh", str(wwise_cli), "Template.wproj", "-GenerateSoundBanks"]
                 
                 print(f"Running command: {' '.join(wwise_cmd)}")
-                result = subprocess.run(wwise_cmd, capture_output=True, text=True)
+                result = subprocess.run(
+                    wwise_cmd, 
+                    capture_output=True, 
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                )
                 if result.returncode != 0:
                     print(f"WwiseCLI failed: {result.stderr}")
                     return False
