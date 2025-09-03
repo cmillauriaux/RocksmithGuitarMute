@@ -69,11 +69,11 @@ def test_environment():
     
     # Test si on est dans un exécutable PyInstaller
     if hasattr(sys, 'frozen'):
-        print("✅ Running in PyInstaller executable")
+        print("[OK] Running in PyInstaller executable")
         if hasattr(sys, '_MEIPASS'):
             print(f"   Temp directory: {sys._MEIPASS}")
     else:
-        print("⚠️  Running in Python interpreter (not executable)")
+        print("[WARNING] Running in Python interpreter (not executable)")
 
 def main():
     """Fonction principale."""
@@ -90,11 +90,11 @@ def main():
         
         for module, status in results.items():
             if status.startswith('OK'):
-                print(f'✅ {module}: {status}')
+                print(f'[OK] {module}: {status}')
             elif status.startswith('PARTIAL'):
-                print(f'⚠️  {module}: {status}')
+                print(f'[WARNING] {module}: {status}')
             else:
-                print(f'❌ {module}: {status}')
+                print(f'[ERROR] {module}: {status}')
         
         # Comptage des imports réussis
         successful = sum(1 for status in results.values() if status.startswith('OK'))
@@ -104,17 +104,17 @@ def main():
         print(f'\nSummary: {successful}/{total} imports successful, {partial} partial')
         
         if successful >= total - 1:  # Permettre 1 échec
-            print('✅ Import test PASSED')
+            print('[OK] Import test PASSED')
             return 0
         elif successful + partial >= total - 1:  # Permettre des imports partiels
-            print('⚠️  Import test PASSED (with warnings)')
+            print('[WARNING] Import test PASSED (with warnings)')
             return 0
         else:
-            print('❌ Import test FAILED')
+            print('[ERROR] Import test FAILED')
             return 1
             
     except Exception as e:
-        print(f'❌ Test script failed: {e}')
+        print(f'[ERROR] Test script failed: {e}')
         traceback.print_exc()
         return 1
 

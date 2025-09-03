@@ -61,76 +61,80 @@ jobs:
     - name: Verify dependencies and fix NumPy
       run: |
         Write-Host "Verifying and fixing dependencies..."
+        $env:PYTHONIOENCODING = "utf-8"
         python -c "
-        import sys
+        import sys, os
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
         print(f'Python executable: {sys.executable}')
         
         # Test numpy import
         try:
             import numpy as np
-            print(f'✅ NumPy version: {np.__version__}')
+            print(f'OK NumPy version: {np.__version__}')
             # Test the problematic import
             import numpy.core.multiarray
-            print('✅ numpy.core.multiarray: OK')
+            print('OK numpy.core.multiarray: working')
         except ImportError as e:
-            print(f'❌ NumPy import failed: {e}')
+            print(f'ERROR NumPy import failed: {e}')
         
         # Test torch
         try:
             import torch
-            print(f'✅ PyTorch version: {torch.__version__}')
+            print(f'OK PyTorch version: {torch.__version__}')
             print(f'CUDA available: {torch.cuda.is_available()}')
         except ImportError as e:
-            print(f'❌ PyTorch import failed: {e}')
+            print(f'ERROR PyTorch import failed: {e}')
         
         # Test torchaudio
         try:
             import torchaudio
-            print(f'✅ TorchAudio version: {torchaudio.__version__}')
+            print(f'OK TorchAudio version: {torchaudio.__version__}')
         except ImportError as e:
-            print(f'❌ TorchAudio import failed: {e}')
+            print(f'ERROR TorchAudio import failed: {e}')
         
         # Test demucs with more detailed error reporting
         try:
             import demucs
-            print(f'✅ Demucs version: {demucs.__version__}')
+            print(f'OK Demucs version: {demucs.__version__}')
         except Exception as e:
-            print(f'❌ Demucs test failed: {e}')
+            print(f'ERROR Demucs test failed: {e}')
         
         # Test soundfile
         try:
             import soundfile
-            print(f'✅ SoundFile version: {soundfile.__version__}')
+            print(f'OK SoundFile version: {soundfile.__version__}')
         except ImportError as e:
-            print(f'❌ SoundFile import failed: {e}')
+            print(f'ERROR SoundFile import failed: {e}')
         
-        print('✅ Dependency verification completed')
+        print('OK Dependency verification completed')
         "
     
     - name: Download Demucs models
       run: |
         Write-Host "Downloading essential Demucs models..."
+        $env:PYTHONIOENCODING = "utf-8"
         python -c "
+        import sys, os
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
         try:
             import demucs.pretrained
-            import os
             
-            # Créer le dossier de cache s'il n'existe pas
+            # Creer le dossier de cache s'il n'existe pas
             cache_dir = os.path.expanduser('~/.cache/torch/hub/checkpoints')
             os.makedirs(cache_dir, exist_ok=True)
             print(f'Cache directory: {cache_dir}')
             
-            # Télécharger le modèle principal (htdemucs_6s fonctionne selon les logs)
+            # Telecharger le modele principal (htdemucs_6s fonctionne selon les logs)
             try:
                 print('Downloading htdemucs_6s model...')
                 model = demucs.pretrained.get_model('htdemucs_6s')
-                print('✅ htdemucs_6s model downloaded and loaded successfully')
+                print('OK htdemucs_6s model downloaded and loaded successfully')
             except Exception as e:
-                print(f'❌ Failed to download htdemucs_6s: {e}')
+                print(f'ERROR Failed to download htdemucs_6s: {e}')
                 
             print('Model download completed')
         except Exception as e:
-            print(f'❌ Model download failed: {e}')
+            print(f'ERROR Model download failed: {e}')
             import traceback
             traceback.print_exc()
         "
@@ -174,11 +178,11 @@ jobs:
         Write-Host "Executable size: $([math]::Round($exeSize, 1)) MB"
         
         if ($exeSize -gt 200) {
-            Write-Host "✅ Executable size suggests all dependencies are included"
+            Write-Host "OK Executable size suggests all dependencies are included"
         } elseif ($exeSize -gt 100) {
-            Write-Host "⚠️  Executable size acceptable but may be missing some dependencies"
+            Write-Host "WARNING Executable size acceptable but may be missing some dependencies"
         } else {
-            Write-Host "❌ Executable size too small - likely missing critical dependencies"
+            Write-Host "ERROR Executable size too small - likely missing critical dependencies"
         }
         
         # Test 2: Run our dedicated test script
@@ -188,12 +192,12 @@ jobs:
         try {
             python test_executable.py
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "✅ Import test passed"
+                Write-Host "OK Import test passed"
             } else {
-                Write-Host "⚠️  Import test had warnings (exit code: $LASTEXITCODE)"
+                Write-Host "WARNING Import test had warnings (exit code: $LASTEXITCODE)"
             }
         } catch {
-            Write-Host "❌ Import test failed: $($_.Exception.Message)"
+            Write-Host "ERROR Import test failed: $($_.Exception.Message)"
         }
         
         # Test 3: Strings analysis for critical components
@@ -211,12 +215,12 @@ jobs:
             
             Write-Host "Found components: $($foundComponents -join ', ')"
             if ($foundComponents.Count -ge 3) {
-                Write-Host "✅ Critical components found in executable"
+                Write-Host "OK Critical components found in executable"
             } else {
-                Write-Host "⚠️  Some critical components may be missing"
+                Write-Host "WARNING Some critical components may be missing"
             }
         } catch {
-            Write-Host "⚠️  Could not analyze executable strings"
+            Write-Host "WARNING Could not analyze executable strings"
         }
         
         Write-Host "`nExecutable testing completed"

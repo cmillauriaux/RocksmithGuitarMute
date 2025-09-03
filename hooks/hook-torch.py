@@ -38,12 +38,12 @@ try:
 except:
     pass
 
-# Collecter les fichiers de données et les bibliothèques dynamiques
+# Collecter les fichiers de donnees et les bibliotheques dynamiques
 try:
     datas = collect_data_files('torch')
     binaries = collect_dynamic_libs('torch')
     
-    # Debug: afficher les DLL trouvées
+    # Debug: afficher les DLL trouvees
     if binaries:
         print(f"PyInstaller hook-torch: Found {len(binaries)} torch binaries")
     else:
@@ -52,4 +52,4 @@ except:
     datas = []
     binaries = []
 
-# NE PAS utiliser excludedimports pour éviter les problèmes
+# NE PAS utiliser excludedimports pour eviter les problemes

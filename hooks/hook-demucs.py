@@ -27,7 +27,7 @@ hiddenimports.extend([
     'demucs.api',
 ])
 
-# Collecter les fichiers de données Demucs (configurations, etc.)
+# Collecter les fichiers de donnees Demucs (configurations, etc.)
 datas = collect_data_files('demucs')
 
 # Debug
