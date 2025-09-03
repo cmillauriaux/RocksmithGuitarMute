@@ -13,12 +13,31 @@ from pathlib import Path
 from typing import Optional, List
 import logging
 import subprocess
+import signal
+import atexit
 
 # Configure Windows to run all subprocess calls silently
 if sys.platform == "win32":
     import subprocess
     # Ensure all subprocess calls are silent by default
     os.environ["PYTHONIOENCODING"] = "utf-8"
+    
+    # Set console mode to prevent showing console windows
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        # Hide console window for this process if it exists
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        
+        # Get console window handle
+        console_window = kernel32.GetConsoleWindow()
+        if console_window:
+            user32.ShowWindow(console_window, 0)  # SW_HIDE
+            
+    except Exception:
+        pass  # Ignore if unable to hide console
 
 # Import main module
 import sys
@@ -27,10 +46,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from rocksmith_guitar_mute import RocksmithGuitarMute, setup_logging
 
 
+def patch_subprocess_for_silence():
+    """Patch subprocess module to ensure all calls are silent on Windows."""
+    if sys.platform == "win32":
+        import subprocess
+        original_run = subprocess.run
+        original_popen = subprocess.Popen
+        
+        def silent_run(*args, **kwargs):
+            if 'creationflags' not in kwargs:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            if 'capture_output' not in kwargs and 'stdout' not in kwargs:
+                kwargs['capture_output'] = True
+            return original_run(*args, **kwargs)
+        
+        def silent_popen(*args, **kwargs):
+            if 'creationflags' not in kwargs:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            return original_popen(*args, **kwargs)
+        
+        subprocess.run = silent_run
+        subprocess.Popen = silent_popen
+
+
 class RocksmithGuitarMuteGUI:
     """Graphical interface for RockSmith Guitar Mute."""
     
     def __init__(self):
+        # Apply subprocess patches for silent operation
+        patch_subprocess_for_silence()
+        
         # Setup logging for GUI
         gui_log_file = Path("RockSmithGuitarMute_GUI.log")
         setup_logging(verbose=True, log_file=str(gui_log_file))
@@ -57,6 +102,9 @@ class RocksmithGuitarMuteGUI:
         self.processor = None
         self.processing_thread = None
         
+        # Flag to track clean shutdown
+        self.shutdown_requested = False
+        
         # Queue for inter-thread communication
         self.message_queue = queue.Queue()
         
@@ -69,6 +117,9 @@ class RocksmithGuitarMuteGUI:
         
         # Start message monitoring
         self.check_queue()
+        
+        # Register cleanup function
+        atexit.register(self.cleanup)
     
     def setup_gui_logging(self):
         """Configure logging for the graphical interface."""
@@ -338,7 +389,7 @@ class RocksmithGuitarMuteGUI:
         self.progress_var.set(0)
         
         # Start processing thread
-        self.processing_thread = threading.Thread(target=self.process_files, daemon=True)
+        self.processing_thread = threading.Thread(target=self.process_files, daemon=False)  # Not daemon
         self.processing_thread.start()
     
     def pause_processing(self):
@@ -368,6 +419,11 @@ class RocksmithGuitarMuteGUI:
             # Logging configuration for this thread
             setup_logging(verbose=True)
             
+            # Check if shutdown was requested before starting
+            if self.shutdown_requested or self.cancelled:
+                self.message_queue.put(('log', "Processing cancelled before start"))
+                return
+            
             # Processor initialization
             self.message_queue.put(('log', f"Initializing with model {self.model_var.get()}"))
             self.message_queue.put(('status', "Initializing processor..."))
@@ -376,6 +432,11 @@ class RocksmithGuitarMuteGUI:
                 demucs_model=self.model_var.get(),
                 device=self.device_var.get()
             )
+            
+            # Check cancellation again
+            if self.shutdown_requested or self.cancelled:
+                self.message_queue.put(('log', "Processing cancelled during initialization"))
+                return
             
             input_path = Path(self.input_path.get())
             output_path = Path(self.output_path.get())
@@ -397,15 +458,17 @@ class RocksmithGuitarMuteGUI:
             processed_count = 0
             
             for i, psarc_file in enumerate(files_to_process):
-                if self.cancelled:
+                # Check for cancellation at the start of each file
+                if self.cancelled or self.shutdown_requested:
                     self.message_queue.put(('log', "Processing cancelled"))
                     break
                 
                 # Pause handling
-                while self.paused and not self.cancelled:
+                while self.paused and not self.cancelled and not self.shutdown_requested:
                     threading.Event().wait(0.1)
                 
-                if self.cancelled:
+                # Check again after pause
+                if self.cancelled or self.shutdown_requested:
                     break
                 
                 # Status update
@@ -420,6 +483,10 @@ class RocksmithGuitarMuteGUI:
                         force=self.overwrite_var.get()
                     )
                     
+                    # Check for cancellation after processing
+                    if self.cancelled or self.shutdown_requested:
+                        break
+                    
                     if result:
                         processed_count += 1
                         self.message_queue.put(('log', f"✓ File processed successfully: {result.name}"))
@@ -428,23 +495,50 @@ class RocksmithGuitarMuteGUI:
 
                 except Exception as e:
                     self.message_queue.put(('log', f"✗ Error processing {psarc_file.name}: {e}"))
+                    # Check for cancellation after error
+                    if self.cancelled or self.shutdown_requested:
+                        break
                 
                 # Progress update
                 self.message_queue.put(('progress', ((i + 1) / total_files) * 100))
             
             # Processing completed
-            if not self.cancelled:
+            if not self.cancelled and not self.shutdown_requested:
                 self.message_queue.put(('status', f"Processing completed - {processed_count}/{total_files} files processed"))
                 self.message_queue.put(('log', f"Processing completed successfully! {processed_count} file(s) processed"))
                 self.message_queue.put(('progress', 100))
             
         except Exception as e:
-            self.message_queue.put(('log', f"Critical error: {e}"))
-            self.message_queue.put(('status', "Error during processing"))
+            if not self.shutdown_requested:
+                self.message_queue.put(('log', f"Critical error: {e}"))
+                self.message_queue.put(('status', "Error during processing"))
         
         finally:
+            # Always clean up and signal completion
+            try:
+                # Clear processor reference
+                if 'processor' in locals():
+                    del processor
+                    
+                # Force garbage collection
+                import gc
+                gc.collect()
+                
+                # Clear PyTorch cache if available
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except:
+                    pass
+                    
+            except Exception as e:
+                if not self.shutdown_requested:
+                    self.message_queue.put(('log', f"Error in processing cleanup: {e}"))
+            
             # Interface reset
-            self.message_queue.put(('processing_done', None))
+            if not self.shutdown_requested:
+                self.message_queue.put(('processing_done', None))
     
     def check_queue(self):
         """Check message queue and update interface."""
@@ -493,10 +587,88 @@ class RocksmithGuitarMuteGUI:
         if not self.cancelled:
             messagebox.showinfo("Completed", "Processing is complete!")
     
+    def cleanup(self):
+        """Clean up resources and terminate processes."""
+        if self.shutdown_requested:
+            return
+            
+        self.shutdown_requested = True
+        self.logger.info("Starting application cleanup...")
+        
+        try:
+            # Cancel any ongoing processing
+            if self.processing:
+                self.cancelled = True
+                self.logger.info("Cancelling ongoing processing...")
+                
+            # Wait for processing thread to finish (with timeout)
+            if self.processing_thread and self.processing_thread.is_alive():
+                self.logger.info("Waiting for processing thread to complete...")
+                self.processing_thread.join(timeout=5.0)
+                
+                if self.processing_thread.is_alive():
+                    self.logger.warning("Processing thread did not stop gracefully")
+                
+            # Clean up PyTorch/CUDA resources
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                self.logger.info("PyTorch resources cleaned up")
+            except Exception as e:
+                self.logger.debug(f"PyTorch cleanup error: {e}")
+                
+            # Force cleanup of all daemon threads
+            for thread in threading.enumerate():
+                if thread != threading.current_thread() and thread.is_alive():
+                    thread.daemon = True
+                    self.logger.debug(f"Set thread {thread.name} as daemon")
+                    
+            # Clear the message queue
+            try:
+                while not self.message_queue.empty():
+                    self.message_queue.get_nowait()
+            except:
+                pass
+                
+            self.logger.info("Cleanup completed successfully")
+                        
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}")
+    
+    def force_exit(self):
+        """Force exit the application."""
+        try:
+            self.logger.info("Force exit requested")
+            self.cleanup()
+            
+            # Terminate any remaining child processes
+            if sys.platform == "win32":
+                try:
+                    import psutil
+                    current_process = psutil.Process()
+                    children = current_process.children(recursive=True)
+                    for child in children:
+                        try:
+                            child.terminate()
+                        except:
+                            pass
+                except ImportError:
+                    pass
+            
+            # Force exit
+            os._exit(0)
+        except Exception as e:
+            print(f"Error in force_exit: {e}")
+            os._exit(1)
+    
     def run(self):
         """Launch the graphical interface."""
         # Application closing configuration
         def on_closing():
+            self.logger.info("Application close requested")
+            
             if self.processing:
                 result = messagebox.askyesno(
                     "Confirmation",
@@ -504,24 +676,140 @@ class RocksmithGuitarMuteGUI:
                 )
                 if not result:
                     return
+                    
+                # Cancel processing gracefully
                 self.cancelled = True
+                self.logger.info("User requested application shutdown during processing")
+                
+                # Wait a bit for cancellation to take effect
+                if self.processing_thread and self.processing_thread.is_alive():
+                    self.logger.info("Waiting for processing to stop...")
+                    self.processing_thread.join(timeout=3.0)
+                    
+                    if self.processing_thread.is_alive():
+                        self.logger.warning("Processing thread did not stop gracefully")
             
-            self.root.destroy()
+            # Cleanup resources
+            self.cleanup()
+            
+            # Destroy the GUI
+            try:
+                self.root.quit()
+                self.root.destroy()
+            except Exception as e:
+                self.logger.debug(f"Error destroying GUI: {e}")
+            
+            # Schedule force exit after a short delay
+            def delayed_force_exit():
+                import time
+                time.sleep(1)  # Give time for normal exit
+                self.logger.info("Performing delayed force exit")
+                os._exit(0)
+            
+            force_exit_thread = threading.Thread(target=delayed_force_exit, daemon=True)
+            force_exit_thread.start()
+            
+            # Try normal exit first
+            try:
+                sys.exit(0)
+            except SystemExit:
+                os._exit(0)
+            except:
+                os._exit(0)
         
         self.root.protocol("WM_DELETE_WINDOW", on_closing)
         
-        # Start main loop
-        self.root.mainloop()
+        # Handle Ctrl+C and other signals
+        if sys.platform == "win32":
+            try:
+                signal.signal(signal.SIGINT, lambda s, f: on_closing())
+                signal.signal(signal.SIGTERM, lambda s, f: on_closing())
+            except:
+                pass
+        
+        try:
+            # Start main loop
+            self.root.mainloop()
+        except KeyboardInterrupt:
+            on_closing()
+        except Exception as e:
+            self.logger.error(f"Error in main loop: {e}")
+            on_closing()
+        finally:
+            self.cleanup()
+            # Final force exit as last resort
+            try:
+                os._exit(0)
+            except:
+                pass
 
 
 def main():
     """Main entry point for the graphical interface."""
+    
+    # Set up signal handlers for clean shutdown
+    def signal_handler(signum, frame):
+        print(f"Received signal {signum}, shutting down...")
+        try:
+            os._exit(0)
+        except:
+            pass
+    
+    if sys.platform == "win32":
+        try:
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+        except:
+            pass
+    
+    app = None
     try:
         app = RocksmithGuitarMuteGUI()
         app.run()
+    except KeyboardInterrupt:
+        print("Application interrupted by user")
+        if app:
+            app.cleanup()
+        sys.exit(0)
     except Exception as e:
-        messagebox.showerror("Critical Error", f"Error starting the application: {e}")
+        try:
+            messagebox.showerror("Critical Error", f"Error starting the application: {e}")
+        except:
+            print(f"Critical Error: {e}")
+        if app:
+            app.cleanup()
         sys.exit(1)
+    finally:
+        # Ultimate cleanup and force exit
+        if app:
+            app.cleanup()
+        
+        # Clean up any remaining threads
+        for thread in threading.enumerate():
+            if thread != threading.current_thread() and thread.is_alive():
+                thread.daemon = True
+        
+        # Force cleanup of PyTorch resources
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except:
+            pass
+        
+        # Force garbage collection
+        try:
+            import gc
+            gc.collect()
+        except:
+            pass
+        
+        # Force exit
+        try:
+            sys.exit(0)
+        except:
+            os._exit(0)
 
 
 if __name__ == "__main__":

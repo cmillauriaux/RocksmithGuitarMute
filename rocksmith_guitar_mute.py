@@ -66,6 +66,36 @@ def find_project_root() -> Path:
     # Fallback: assume current directory is project root
     return Path(__file__).parent.resolve()
 
+
+def patch_subprocess_for_silence():
+    """Patch subprocess module to ensure all calls are silent on Windows."""
+    if sys.platform == "win32":
+        import subprocess
+        original_run = subprocess.run
+        original_popen = subprocess.Popen
+        original_call = subprocess.call
+        
+        def silent_run(*args, **kwargs):
+            if 'creationflags' not in kwargs:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            if 'capture_output' not in kwargs and 'stdout' not in kwargs:
+                kwargs['capture_output'] = True
+            return original_run(*args, **kwargs)
+        
+        def silent_popen(*args, **kwargs):
+            if 'creationflags' not in kwargs:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            return original_popen(*args, **kwargs)
+            
+        def silent_call(*args, **kwargs):
+            if 'creationflags' not in kwargs:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            return original_call(*args, **kwargs)
+        
+        subprocess.run = silent_run
+        subprocess.Popen = silent_popen
+        subprocess.call = silent_call
+
 # Demucs imports
 try:
     import demucs.separate
@@ -94,6 +124,9 @@ class RocksmithGuitarMute:
             demucs_model: Demucs model to use for source separation
             device: Device to use for processing ("cpu", "cuda", or "auto")
         """
+        # Apply subprocess patches for silent operation
+        patch_subprocess_for_silence()
+        
         self.demucs_model = demucs_model
         self.device = self._get_device(device)
         self.logger = logging.getLogger(__name__)
