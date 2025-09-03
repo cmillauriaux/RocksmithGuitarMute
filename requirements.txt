@@ -1,10 +1,10 @@
 # Core dependencies for RockSmith Guitar Mute
-# Updated versions for CI compatibility
-torch>=2.2.0
-torchaudio>=2.2.0
-numpy>=1.24.0  # Use available binary wheels
-demucs>=4.0.0
-soundfile>=0.12.0
+# Updated versions to match working local environment
+torch>=2.8.0  # Updated to match local working version
+torchaudio>=2.8.0  # Updated to match local working version
+numpy>=1.26.4  # Use available binary wheels
+demucs>=4.0.1,<4.1.0  # Use stable 4.0.1 instead of alpha 4.1.0a3
+soundfile>=0.13.1
 cffi>=1.0
 
 # Critical PyTorch/Demucs dependencies

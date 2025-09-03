@@ -563,7 +563,7 @@ def build_executable(debug=False, onefile=False):
             'torchaudio._extension', 'torchaudio.io',
             'demucs.hdemucs', 'demucs.htdemucs', 'demucs.wdemucs', 'demucs.transformer',
             'demucs.spec', 'demucs.states', 'demucs.utils', 'demucs.wav', 'demucs.audio',
-            'demucs.repo', 'demucs.apply', 'demucs.api',
+            'demucs.repo', 'demucs.apply',
             # NumPy imports essentiels
             'numpy.core', 'numpy.core.multiarray', 'numpy.core._multiarray_umath',
             'numpy.core.multiarray_umath', 'numpy.core.numeric', 'numpy.core.umath',

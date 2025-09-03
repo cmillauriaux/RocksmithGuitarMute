@@ -42,14 +42,14 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         # Install compatible versions for CI environment
-        # Use newer compatible versions since 2.0.x are no longer available
+        # Use same versions as local environment for consistency
         pip install numpy==1.26.4  # Use a version available in binary wheels
-        pip install torch==2.2.0+cpu torchaudio==2.2.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+        pip install torch==2.8.0+cpu torchaudio==2.8.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
         pip install PyInstaller
         # Install project dependencies in development mode first
         pip install -e rsrtools/
         # Install Demucs with relaxed version constraints
-        cd demucs && pip install -e . --no-deps && cd ..
+         cd demucs && pip install -e . --no-deps && cd ..
         # Manually install Demucs dependencies with compatible versions
         pip install einops julius>=0.2.3 lameenc openunmix pyyaml torchaudio>=2.2.0
         pip install dora-search

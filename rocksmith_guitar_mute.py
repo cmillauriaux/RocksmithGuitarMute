@@ -17,6 +17,16 @@ Where:
     output_dir: Directory where processed files will be saved
 """
 
+# Fix for PyInstaller stdout/stderr issues
+import sys
+import io
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    # Running in PyInstaller bundle
+    if sys.stdout is None:
+        sys.stdout = io.StringIO()
+    if sys.stderr is None:
+        sys.stderr = io.StringIO()
+
 import argparse
 import asyncio
 import logging
@@ -298,8 +308,38 @@ class RocksmithGuitarMute:
             
             self.logger.debug(f"Running demucs with args: {args}")
             
-            # Run demucs separation
-            demucs.separate.main(args)
+            # Run demucs separation with proper stdout/stderr handling for PyInstaller
+            import sys
+            import io
+            import contextlib
+            
+            # Create safe stdout/stderr if they are None (PyInstaller issue)
+            if sys.stdout is None:
+                sys.stdout = io.StringIO()
+            if sys.stderr is None:
+                sys.stderr = io.StringIO()
+            
+            # Capture output to prevent PyInstaller issues
+            captured_output = io.StringIO()
+            captured_error = io.StringIO()
+            
+            with contextlib.redirect_stdout(captured_output), contextlib.redirect_stderr(captured_error):
+                try:
+                    demucs.separate.main(args)
+                except SystemExit as e:
+                    # demucs.separate.main may call sys.exit(), which is normal
+                    if e.code != 0:
+                        self.logger.error(f"Demucs processing failed with exit code: {e.code}")
+                        self.logger.error(f"Demucs stderr: {captured_error.getvalue()}")
+                        raise RuntimeError(f"Demucs processing failed")
+            
+            # Log captured output for debugging
+            output_str = captured_output.getvalue()
+            error_str = captured_error.getvalue()
+            if output_str:
+                self.logger.debug(f"Demucs stdout: {output_str}")
+            if error_str:
+                self.logger.debug(f"Demucs stderr: {error_str}")
             
             # Find the separated stems directory
             stems_dir = temp_dir / self.demucs_model / audio_path.stem
@@ -815,11 +855,18 @@ def _log_system_info(log_file: Path) -> None:
     # Demucs models info
     try:
         import demucs.pretrained
+        import io
+        import contextlib
         logger.info("Checking Demucs models:")
         models_to_check = ['htdemucs_6s', 'htdemucs', 'mdx_extra_q']
         for model_name in models_to_check:
             try:
-                model = demucs.pretrained.get_model(model_name)
+                # Capture output to prevent PyInstaller stdout/stderr issues
+                captured_output = io.StringIO()
+                captured_error = io.StringIO()
+                
+                with contextlib.redirect_stdout(captured_output), contextlib.redirect_stderr(captured_error):
+                    model = demucs.pretrained.get_model(model_name)
                 logger.info(f"  ✅ {model_name}: Available")
             except Exception as e:
                 logger.warning(f"  ⚠️  {model_name}: Not available - {e}")
