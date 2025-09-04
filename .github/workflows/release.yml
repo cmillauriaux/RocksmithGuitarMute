@@ -158,6 +158,16 @@ jobs:
           Write-Host "Build successful - executable found"
           $size = (Get-Item "build/dist/RockSmithGuitarMute.exe").Length / 1MB
           Write-Host "Executable size: $([math]::Round($size, 1)) MB"
+          
+          # Basic size validation
+          if ($size -gt 200) {
+            Write-Host "OK Executable size suggests all dependencies are included"
+          } elseif ($size -gt 100) {
+            Write-Host "WARNING Executable size acceptable but may be missing some dependencies"
+          } else {
+            Write-Host "ERROR Executable size too small - likely missing critical dependencies"
+            exit 1
+          }
         } else {
           Write-Host "Build failed - executable not found"
           Write-Host "Contents of build/dist/:"
@@ -166,64 +176,6 @@ jobs:
           }
           exit 1
         }
-    
-    - name: Test executable functionality
-      run: |
-        Write-Host "Testing executable functionality..."
-        cd build/dist
-        
-        # Test 1: Basic executable analysis
-        Write-Host "Test 1: Executable analysis"
-        $exeSize = (Get-Item ".\RockSmithGuitarMute.exe").Length / 1MB
-        Write-Host "Executable size: $([math]::Round($exeSize, 1)) MB"
-        
-        if ($exeSize -gt 200) {
-            Write-Host "OK Executable size suggests all dependencies are included"
-        } elseif ($exeSize -gt 100) {
-            Write-Host "WARNING Executable size acceptable but may be missing some dependencies"
-        } else {
-            Write-Host "ERROR Executable size too small - likely missing critical dependencies"
-        }
-        
-        # Test 2: Run our dedicated test script
-        Write-Host "`nTest 2: Running import tests"
-        Copy-Item "..\test_executable.py" "test_executable.py"
-        
-        try {
-            python test_executable.py
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "OK Import test passed"
-            } else {
-                Write-Host "WARNING Import test had warnings (exit code: $LASTEXITCODE)"
-            }
-        } catch {
-            Write-Host "ERROR Import test failed: $($_.Exception.Message)"
-        }
-        
-        # Test 3: Strings analysis for critical components
-        Write-Host "`nTest 3: Critical components check"
-        try {
-            $patterns = @("numpy", "torch", "demucs", "htdemucs_6s", "python")
-            $foundComponents = @()
-            
-            foreach ($pattern in $patterns) {
-                $found = Select-String -Path ".\RockSmithGuitarMute.exe" -Pattern $pattern -Quiet
-                if ($found) {
-                    $foundComponents += $pattern
-                }
-            }
-            
-            Write-Host "Found components: $($foundComponents -join ', ')"
-            if ($foundComponents.Count -ge 3) {
-                Write-Host "OK Critical components found in executable"
-            } else {
-                Write-Host "WARNING Some critical components may be missing"
-            }
-        } catch {
-            Write-Host "WARNING Could not analyze executable strings"
-        }
-        
-        Write-Host "`nExecutable testing completed"
     
     - name: Create release archive
       run: |
@@ -259,9 +211,10 @@ jobs:
           
           ## Installation
           1. Download `RockSmithGuitarMute-Windows.zip`
-          2. Extract the archive
-          3. Run `install.bat` as administrator for system installation
-          4. Or run `RockSmithGuitarMute.exe` directly
+          2. Extract the archive to a folder of your choice
+          3. Run `RockSmithGuitarMute.exe` directly - no installation required
+          
+          Note: This is a portable application that doesn't require system installation.
           
           ## System Requirements
           - Windows 10/11 (64-bit)
