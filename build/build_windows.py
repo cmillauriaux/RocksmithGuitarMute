@@ -613,123 +613,73 @@ def build_executable(debug=False, onefile=False):
         return False
 
 
-def create_installer_script():
-    """Crée un script d'installation simple."""
-    print("Creation du script d'installation...")
-    
-    installer_content = '''@echo off
-echo ========================================
-echo   RockSmith Guitar Mute - Installation
-echo ========================================
-echo.
-
-REM Vérifier si le dossier de destination existe
-set "INSTALL_DIR=%PROGRAMFILES%\\RockSmithGuitarMute"
-
-echo Installation dans: %INSTALL_DIR%
-echo.
-
-REM Créer le dossier d'installation
-if not exist "%INSTALL_DIR%" (
-    mkdir "%INSTALL_DIR%"
-)
-
-REM Copier les fichiers
-echo Copie des fichiers...
-xcopy /E /I /Y "RockSmithGuitarMute\\*" "%INSTALL_DIR%\\"
-
-REM Créer un raccourci sur le bureau
-echo Création du raccourci...
-set "DESKTOP=%USERPROFILE%\\Desktop"
-set "SHORTCUT=%DESKTOP%\\RockSmith Guitar Mute.lnk"
-
-powershell -Command "$WshShell = New-Object -comObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT%'); $Shortcut.TargetPath = '%INSTALL_DIR%\\RockSmithGuitarMute.exe'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Save()"
-
-echo.
-echo Installation terminee!
-echo.
-echo Le programme est installé dans: %INSTALL_DIR%
-echo Un raccourci a été créé sur le bureau.
-echo.
-pause
-'''
-    
-    with open('dist/install.bat', 'w', encoding='utf-8') as f:
-        f.write(installer_content)
-    
-    print("OK Script d'installation cree: dist/install.bat")
-
-
 def create_readme():
-    """Crée un fichier README pour la distribution."""
-    print("Creation du README de distribution...")
+    """Create a README file for the distribution."""
+    print("Creating distribution README...")
     
-    readme_content = '''# RockSmith Guitar Mute - Version Standalone
+    readme_content = '''# RockSmith Guitar Mute - Standalone Version
 
 ## Description
-RockSmith Guitar Mute est un outil qui utilise l'intelligence artificielle pour supprimer les pistes de guitare des fichiers PSARC de Rocksmith 2014, créant ainsi des backing tracks pour la pratique.
+RockSmith Guitar Mute is a tool that uses artificial intelligence to remove guitar tracks from Rocksmith 2014 PSARC files, creating backing tracks for practice.
 
 ## Installation
 
-### Installation automatique
-1. Exécutez `install.bat` en tant qu'administrateur
-2. Le programme sera installé dans `C:\\Program Files\\RockSmithGuitarMute`
-3. Un raccourci sera créé sur le bureau
+### Simple Installation
+1. Extract all files to a folder of your choice (e.g., C:\\RockSmithGuitarMute)
+2. Run `RockSmithGuitarMute.exe`
 
-### Installation manuelle
-1. Extrayez tous les fichiers dans un dossier de votre choix
-2. Exécutez `RockSmithGuitarMute.exe`
+Note: No additional installation is required. This is a portable application.
 
-## Utilisation
+## Usage
 
-### Interface Graphique
-1. Lancez `RockSmithGuitarMute.exe`
-2. Sélectionnez un fichier PSARC ou un dossier contenant des fichiers PSARC
-3. Choisissez un dossier de sortie
-4. Configurez les options selon vos besoins
-5. Cliquez sur "Démarrer le traitement"
+### Graphical Interface
+1. Launch `RockSmithGuitarMute.exe`
+2. Select a PSARC file or folder containing PSARC files
+3. Choose an output folder
+4. Configure options according to your needs
+5. Click "Start Processing"
 
-### Options disponibles
-- **Modèle Demucs**: Choisissez le modèle d'IA (htdemucs_6s recommandé)
-- **Périphérique**: Auto (recommandé), CPU ou CUDA (si GPU compatible)
-- **Nombre de processus**: Ajustez selon votre CPU
-- **Écrasement**: Autorise le remplacement des fichiers existants
+### Available Options
+- **Demucs Model**: Choose the AI model (htdemucs_6s recommended)
+- **Device**: Auto (recommended), CPU or CUDA (if compatible GPU)
+- **Number of processes**: Adjust according to your CPU
+- **Overwrite**: Allow replacing existing files
 
-## Configuration système requise
+## System Requirements
 - Windows 10/11 (64-bit)
-- 8 GB RAM minimum (16 GB recommandé)
-- 2 GB d'espace disque libre
-- Processeur multi-cœurs recommandé
-- GPU NVIDIA compatible CUDA (optionnel, pour accélération)
+- 8 GB RAM minimum (16 GB recommended)
+- 2 GB free disk space
+- Multi-core processor recommended
+- NVIDIA CUDA-compatible GPU (optional, for acceleration)
 
-## Dépannage
+## Troubleshooting
 
-### L'application ne démarre pas
-- Vérifiez que vous avez les droits d'administrateur
-- Assurez-vous que Windows Defender n'a pas mis en quarantaine l'exécutable
-- Installez Microsoft Visual C++ Redistributable si nécessaire
+### Application won't start
+- Check that you have administrator rights if needed
+- Make sure Windows Defender hasn't quarantined the executable
+- Install Microsoft Visual C++ Redistributable if necessary
 
-### Traitement lent
-- Utilisez un GPU NVIDIA compatible CUDA si disponible
-- Réduisez le nombre de processus parallèles
-- Fermez les autres applications gourmandes en ressources
+### Slow processing
+- Use a NVIDIA CUDA-compatible GPU if available
+- Reduce the number of parallel processes
+- Close other resource-intensive applications
 
-### Erreurs de traitement
-- Vérifiez que les fichiers PSARC ne sont pas corrompus
-- Assurez-vous d'avoir suffisamment d'espace disque
-- Consultez les logs dans l'interface pour plus de détails
+### Processing errors
+- Check that PSARC files are not corrupted
+- Make sure you have enough disk space
+- Check the logs in the interface for more details
 
 ## Support
-Pour obtenir de l'aide ou signaler des problèmes, consultez la documentation du projet sur GitHub.
+For help or to report issues, consult the project documentation on GitHub.
 
-## Licence
-Ce logiciel est distribué sous licence open source. Voir le fichier LICENSE pour plus de détails.
+## License
+This software is distributed under an open source license. See the LICENSE file for more details.
 '''
     
     with open('dist/README.txt', 'w', encoding='utf-8') as f:
         f.write(readme_content)
     
-    print("OK README cree: dist/README.txt")
+    print("OK README created: dist/README.txt")
 
 
 def optimize_distribution():
@@ -846,19 +796,17 @@ def main():
         optimize_distribution()
     
     # Création des fichiers additionnels
-    create_installer_script()
     create_readme()
     
     print("\nOK Compilation terminee avec succes!")
     print(f"Distribution disponible dans: {Path('dist').absolute()}")
     print("\nFichiers crees:")
     print("  - RockSmithGuitarMute.exe (application principale)")
-    print("  - install.bat (script d'installation)")
     print("  - README.txt (documentation)")
     
     print("\nPour distribuer:")
     print("  1. Compressez le dossier 'dist' en ZIP")
-    print("  2. Ou utilisez install.bat pour une installation système")
+    print("  2. L'application est portable - aucune installation requise")
 
 
 if __name__ == "__main__":
