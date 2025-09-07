@@ -1,0 +1,2 @@
+# Requirements supplémentaires pour l'interface graphique
+Pillow>=9.0.0

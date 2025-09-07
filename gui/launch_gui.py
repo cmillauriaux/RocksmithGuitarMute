@@ -18,12 +18,22 @@ def main():
     # Check that tkinter is available
     try:
         import tkinter as tk
-        print("✅ Tkinter available")
+        print("✅ Tkinter disponible")
     except ImportError:
-        print("❌ Error: Tkinter is not available")
-        print("Tkinter is normally included with Python. Reinstall Python if necessary.")
-        input("Press Enter to close...")
+        print("❌ Erreur: Tkinter n'est pas disponible")
+        print("Tkinter est normalement inclus avec Python. Réinstallez Python si nécessaire.")
+        input("Appuyez sur Entrée pour fermer...")
         sys.exit(1)
+    
+    # Check that Pillow is available for images
+    try:
+        from PIL import Image, ImageTk
+        print("✅ Pillow disponible pour les images")
+    except ImportError:
+        print("⚠️ Avertissement: Pillow n'est pas installé")
+        print("Le logo pourrait ne pas s'afficher. Installez Pillow avec:")
+        print("pip install Pillow")
+        print("L'interface continuera sans les images...")
     
     # Clean .pyc files that could cause conflicts
     try:
@@ -40,26 +50,27 @@ def main():
     # Import and launch interface
     try:
         from gui_main import main as gui_main
-        print("✅ Graphical interface loaded")
+        print("✅ Interface graphique chargée")
         gui_main()
         
     except ImportError as e:
-        print(f"❌ Import error: {e}")
-        print("\n🔧 Possible solutions:")
-        print("1. Install dependencies: pip install -r requirements.txt")
-        print("2. Clean temporary files: clean.bat")
-        print("3. Check that all files are present")
-        input("\nPress Enter to close...")
+        print(f"❌ Erreur d'import: {e}")
+        print("\n🔧 Solutions possibles:")
+        print("1. Installer les dépendances: pip install -r requirements.txt")
+        print("2. Installer Pillow pour les images: pip install Pillow")
+        print("3. Nettoyer les fichiers temporaires: clean.bat")
+        print("4. Vérifier que tous les fichiers sont présents")
+        input("\nAppuyez sur Entrée pour fermer...")
         sys.exit(1)
         
     except Exception as e:
-        print(f"❌ Launch error: {e}")
-        print(f"Error type: {type(e).__name__}")
-        print("\n🔧 Try to:")
-        print("1. Clean temporary files: clean.bat")
-        print("2. Restart your computer")
-        print("3. Check logs for more details")
-        input("\nPress Enter to close...")
+        print(f"❌ Erreur de lancement: {e}")
+        print(f"Type d'erreur: {type(e).__name__}")
+        print("\n🔧 Essayez de:")
+        print("1. Nettoyer les fichiers temporaires: clean.bat")
+        print("2. Redémarrer votre ordinateur")
+        print("3. Consulter les logs pour plus de détails")
+        input("\nAppuyez sur Entrée pour fermer...")
         sys.exit(1)
 
 if __name__ == "__main__":
