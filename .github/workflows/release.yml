@@ -46,6 +46,8 @@ jobs:
         pip install numpy==1.26.4  # Use a version available in binary wheels
         pip install torch==2.8.0+cpu torchaudio==2.8.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
         pip install PyInstaller
+        # Install Pillow for icon conversion
+        pip install Pillow
         # Install project dependencies in development mode first
         pip install -e rsrtools/
         # Install Demucs with relaxed version constraints
@@ -57,6 +59,21 @@ jobs:
         pip install diffq omegaconf hydra-core>=1.1.0
         # Install remaining requirements
         pip install soundfile>=0.12.0 cffi>=1.0
+    
+    - name: Create application icon
+      run: |
+        Write-Host "Converting PNG icon to ICO format..."
+        python -c "
+        from PIL import Image
+        import os
+        if os.path.exists('RSGM_v1a_box.png'):
+            img = Image.open('RSGM_v1a_box.png')
+            img.save('RSGM_v1a_box.ico')
+            print('Icon converted successfully')
+        else:
+            print('Error: RSGM_v1a_box.png not found')
+            exit(1)
+        "
     
     - name: Verify dependencies and fix NumPy
       run: |

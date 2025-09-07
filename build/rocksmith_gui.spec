@@ -156,7 +156,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon.ico' if Path('icon.ico').exists() else None,
+    icon='..\\RSGM_v1a_box.ico',
 )
 
 coll = COLLECT(
