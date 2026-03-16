@@ -1,7 +1,7 @@
 # Core dependencies for RockSmith Guitar Mute
 # Updated versions to match working local environment
-torch>=2.8.0  # Updated to match local working version
-torchaudio>=2.8.0  # Updated to match local working version
+torch==2.6.0  # Pinned: torchaudio 2.7+ requires torchcodec which is not available on Windows
+torchaudio==2.6.0  # Pinned: 2.7+ switches default backend to torchcodec (Windows incompatible)
 numpy>=1.26.4  # Use available binary wheels
 demucs>=4.0.1,<4.1.0  # Use stable 4.0.1 instead of alpha 4.1.0a3
 soundfile>=0.13.1
@@ -12,9 +12,9 @@ filelock>=3.0
 fsspec
 jinja2>=3.0
 markupsafe>=2.0
-mpmath>=1.0
+mpmath>=1.1.0,<1.4  # torch 2.6.0 requires mpmath<1.4
 networkx>=3.0
-sympy>=1.13
+sympy==1.13.1  # Pinned: torch 2.6.0 requires exactly 1.13.1
 pillow>=10.0
 
 # Dependencies for rs-utils (Python scripts for Rocksmith 2014)

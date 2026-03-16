@@ -62,11 +62,14 @@ def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
         wwise_cli = None
         for base_path in possible_wwise_paths:
             if base_path.exists():
-                # Look for Wwise installations
-                for wwise_dir in base_path.glob("Wwise*"):
-                    cli_path = wwise_dir / "Authoring" / "Win32" / "Release" / "bin" / "WwiseCLI.exe"
-                    if cli_path.exists():
-                        wwise_cli = cli_path
+                # Prefer Wwise 2013 (required for Rocksmith 2014 compatibility)
+                for wwise_dir in sorted(base_path.glob("Wwise*"), key=lambda p: "2013" not in p.name):
+                    for arch in ["Win32", "x64"]:
+                        cli_path = wwise_dir / "Authoring" / arch / "Release" / "bin" / "WwiseCLI.exe"
+                        if cli_path.exists():
+                            wwise_cli = cli_path
+                            break
+                    if wwise_cli:
                         break
                 if wwise_cli:
                     break
@@ -158,7 +161,9 @@ def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 )
                 if result.returncode != 0:
-                    print(f"WwiseCLI failed: {result.stderr}")
+                    print(f"WwiseCLI failed (exit code {result.returncode})")
+                    print(f"  stdout: {result.stdout}")
+                    print(f"  stderr: {result.stderr}")
                     return False
                 
                 # Find generated WEM file
@@ -176,7 +181,7 @@ def convert_audio_to_wem(input_file: Path, output_file: Path) -> bool:
                 generated_wem = wem_files[0]  # Take the first one
                 shutil.copy2(generated_wem, output_file)
                 
-                print(f"✅ Successfully converted to WEM: {output_file}")
+                print(f"Successfully converted to WEM: {output_file}")
                 return True
                 
             finally:
@@ -207,10 +212,10 @@ def main():
     print(f"Converting {input_file} to {output_file}")
     
     if convert_audio_to_wem(input_file, output_file):
-        print("✅ Conversion completed successfully!")
+        print("Conversion completed successfully!")
         sys.exit(0)
     else:
-        print("❌ Conversion failed!")
+        print("Conversion failed!")
         sys.exit(1)
 
 

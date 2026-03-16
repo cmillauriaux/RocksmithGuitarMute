@@ -113,6 +113,40 @@ except ImportError:
     sys.exit(1)
 
 
+VARIANT_CONFIGS = {
+    "no_vocals": {"suffix": "_no_vocals", "include_stems": ["drums", "bass", "piano", "other", "guitar"]},
+    "drums_only": {"suffix": "_drums_only", "include_stems": ["drums"]},
+    "no_guitar": {"suffix": "_no_guitar", "include_stems": ["drums", "bass", "vocals", "piano", "other"]},
+    "no_bass": {"suffix": "_no_bass", "include_stems": ["drums", "vocals", "piano", "other", "guitar"]},
+    "no_guitar_no_bass": {"suffix": "_no_guitar_no_bass", "include_stems": ["drums", "vocals", "piano", "other"]},
+    "vocals_and_drums": {"suffix": "_vocals_and_drums", "include_stems": ["vocals", "drums"]},
+    "no_guitar_no_bass_no_vocals": {"suffix": "_no_guitar_no_bass_no_vocals", "include_stems": ["drums", "piano", "other"]},
+}
+ALL_STEMS = ["drums", "bass", "vocals", "piano", "guitar", "other"]
+DEFAULT_VARIANTS = ["no_guitar"]
+ALL_VARIANTS = list(VARIANT_CONFIGS.keys())
+
+
+def parse_custom_variant(spec: str) -> tuple:
+    """Parse a custom variant spec like 'my_mix:drums,vocals,piano'.
+
+    Returns (name, config_dict) or raises ValueError.
+    """
+    if ":" not in spec:
+        raise ValueError(f"Custom variant must be in 'name:stem1,stem2,...' format, got: {spec}")
+    name, stems_str = spec.split(":", 1)
+    name = name.strip()
+    if not name:
+        raise ValueError("Custom variant name cannot be empty")
+    stems = [s.strip() for s in stems_str.split(",") if s.strip()]
+    invalid = [s for s in stems if s not in ALL_STEMS]
+    if invalid:
+        raise ValueError(f"Unknown stems: {invalid}. Valid stems: {ALL_STEMS}")
+    if not stems:
+        raise ValueError("Custom variant must include at least one stem")
+    return name, {"suffix": f"_{name}", "include_stems": stems}
+
+
 class RocksmithGuitarMute:
     """Main class for processing Rocksmith PSARC files to remove guitar tracks."""
     
@@ -325,158 +359,152 @@ class RocksmithGuitarMute:
         # Clean up temporary OGG
         temp_ogg.unlink()
     
+    def separate_stems(self, audio_path: Path, temp_dir: Path) -> Tuple[Dict[str, torch.Tensor], int]:
+        """
+        Run Demucs source separation on an audio file.
+
+        Args:
+            audio_path: Path to the input audio file
+            temp_dir: Directory for Demucs output (caller manages cleanup)
+
+        Returns:
+            Tuple of (stems_dict, sample_rate)
+        """
+        self.logger.info(f"Running Demucs source separation: {audio_path.name}")
+
+        # Build demucs command arguments
+        args = [
+            "--name", self.demucs_model,
+            "--device", self.device,
+            "--out", str(temp_dir),
+            str(audio_path)
+        ]
+
+        self.logger.debug(f"Running demucs with args: {args}")
+
+        # Run demucs separation with proper stdout/stderr handling for PyInstaller
+        import sys
+        import io
+        import contextlib
+
+        # Create safe stdout/stderr if they are None (PyInstaller issue)
+        if sys.stdout is None:
+            sys.stdout = io.StringIO()
+        if sys.stderr is None:
+            sys.stderr = io.StringIO()
+
+        # Capture output to prevent PyInstaller issues
+        captured_output = io.StringIO()
+        captured_error = io.StringIO()
+
+        with contextlib.redirect_stdout(captured_output), contextlib.redirect_stderr(captured_error):
+            try:
+                demucs.separate.main(args)
+            except SystemExit as e:
+                # demucs.separate.main may call sys.exit(), which is normal
+                if e.code != 0:
+                    self.logger.error(f"Demucs processing failed with exit code: {e.code}")
+                    self.logger.error(f"Demucs stderr: {captured_error.getvalue()}")
+                    raise RuntimeError(f"Demucs processing failed")
+
+        # Log captured output for debugging
+        output_str = captured_output.getvalue()
+        error_str = captured_error.getvalue()
+        if output_str:
+            self.logger.debug(f"Demucs stdout: {output_str}")
+        if error_str:
+            self.logger.debug(f"Demucs stderr: {error_str}")
+
+        # Find the separated stems directory
+        stems_dir = temp_dir / self.demucs_model / audio_path.stem
+
+        if not stems_dir.exists():
+            raise FileNotFoundError(f"Demucs output directory not found: {stems_dir}")
+
+        # Load separated stems
+        stems = {}
+        sr = None
+        for stem_file in stems_dir.glob("*.wav"):
+            stem_name = stem_file.stem
+            audio, current_sr = torchaudio.load(str(stem_file))
+            stems[stem_name] = audio
+            if sr is None:
+                sr = current_sr
+            self.logger.debug(f"Loaded stem: {stem_name}")
+
+        if not stems:
+            raise FileNotFoundError(f"No audio stems found in: {stems_dir}")
+
+        if sr is None:
+            raise ValueError("Could not determine sample rate from audio files")
+
+        self.logger.info(f"Separated into {len(stems)} stems: {', '.join(stems.keys())}")
+        return stems, sr
+
+    def mix_stems(self, stems: Dict[str, torch.Tensor], sr: int,
+                  include_stems: list, output_path: Path,
+                  reduce_vocals: int = 100) -> None:
+        """
+        Mix selected stems into a single audio file.
+
+        Args:
+            stems: Dictionary of stem_name -> audio tensor
+            sr: Sample rate
+            include_stems: List of stem names to include in the mix
+            output_path: Path for the output audio file
+            reduce_vocals: Vocals volume percentage (0-100)
+        """
+        selected = []
+        for stem_name in include_stems:
+            if stem_name in stems:
+                audio = stems[stem_name]
+                # Apply vocals reduction if needed
+                if stem_name == 'vocals' and reduce_vocals < 100:
+                    factor = reduce_vocals / 100.0
+                    audio = audio * factor
+                    self.logger.debug(f"Applied vocals reduction: {reduce_vocals}%")
+                selected.append(audio)
+                self.logger.debug(f"Including stem: {stem_name}")
+            else:
+                self.logger.warning(
+                    f"Stem '{stem_name}' not available from model '{self.demucs_model}'. "
+                    f"Available stems: {list(stems.keys())}. "
+                    f"Use 'htdemucs_6s' model for guitar/piano separation."
+                )
+
+        if not selected:
+            raise ValueError(f"No matching stems found for: {include_stems}")
+
+        mixed = torch.stack(selected).sum(dim=0)
+        torchaudio.save(str(output_path), mixed, sr)
+        self.logger.debug(f"Mixed track saved: {output_path}")
+
     def remove_guitar_track(self, audio_path: Path, output_path: Path, save_guitar: bool = False) -> None:
         """
         Remove guitar track from audio using Demucs.
-        
-        Args:
-            audio_path: Path to the input audio file
-            output_path: Path for the output backing track
-            save_guitar: If True, also save the isolated guitar track
+        Backward-compatible wrapper around separate_stems() and mix_stems().
         """
-        self.logger.info(f"Processing audio with Demucs: {audio_path.name}")
-        
-        # Create temporary directory for demucs output
         temp_dir = output_path.parent / "demucs_temp"
         temp_dir.mkdir(exist_ok=True)
-        
+
         try:
-            # Build demucs command arguments
-            args = [
-                "--name", self.demucs_model,
-                "--device", self.device,
-                "--out", str(temp_dir),
-                str(audio_path)
-            ]
-            
-            self.logger.debug(f"Running demucs with args: {args}")
-            
-            # Run demucs separation with proper stdout/stderr handling for PyInstaller
-            import sys
-            import io
-            import contextlib
-            
-            # Create safe stdout/stderr if they are None (PyInstaller issue)
-            if sys.stdout is None:
-                sys.stdout = io.StringIO()
-            if sys.stderr is None:
-                sys.stderr = io.StringIO()
-            
-            # Capture output to prevent PyInstaller issues
-            captured_output = io.StringIO()
-            captured_error = io.StringIO()
-            
-            with contextlib.redirect_stdout(captured_output), contextlib.redirect_stderr(captured_error):
-                try:
-                    demucs.separate.main(args)
-                except SystemExit as e:
-                    # demucs.separate.main may call sys.exit(), which is normal
-                    if e.code != 0:
-                        self.logger.error(f"Demucs processing failed with exit code: {e.code}")
-                        self.logger.error(f"Demucs stderr: {captured_error.getvalue()}")
-                        raise RuntimeError(f"Demucs processing failed")
-            
-            # Log captured output for debugging
-            output_str = captured_output.getvalue()
-            error_str = captured_error.getvalue()
-            if output_str:
-                self.logger.debug(f"Demucs stdout: {output_str}")
-            if error_str:
-                self.logger.debug(f"Demucs stderr: {error_str}")
-            
-            # Find the separated stems directory
-            stems_dir = temp_dir / self.demucs_model / audio_path.stem
-            
-            if not stems_dir.exists():
-                raise FileNotFoundError(f"Demucs output directory not found: {stems_dir}")
-            
-            # Load separated stems
-            stems = {}
-            sr = None  # Initialize sample rate
-            for stem_file in stems_dir.glob("*.wav"):
-                stem_name = stem_file.stem
-                audio, current_sr = torchaudio.load(str(stem_file))
-                stems[stem_name] = audio
-                if sr is None:
-                    sr = current_sr  # Use the first file's sample rate
-                self.logger.debug(f"Loaded stem: {stem_name}")
-            
-            # Check if we found any stems
-            if not stems:
-                raise FileNotFoundError(f"No audio stems found in: {stems_dir}")
-            
-            if sr is None:
-                raise ValueError("Could not determine sample rate from audio files")
-            
-            # Apply vocals volume reduction if specified
-            if self.reduce_vocals < 100 and 'vocals' in stems:
-                vocals_volume_factor = self.reduce_vocals / 100.0
-                stems['vocals'] = stems['vocals'] * vocals_volume_factor
-                self.logger.info(f"Applied vocals volume reduction: {self.reduce_vocals}% ({vocals_volume_factor:.2f}x)")
-            
-            # For htdemucs_6s model, exclude the guitar stem specifically
-            backing_stems = []
+            stems, sr = self.separate_stems(audio_path, temp_dir)
+
+            # Determine which stems to include (exclude guitar)
             if self.demucs_model == "htdemucs_6s":
-                exclude_stems = ['guitar']  # Specific guitar stem in 6-source model
-                self.logger.info("Using htdemucs_6s: excluding dedicated guitar stem")
+                include = [s for s in stems if s != 'guitar']
             else:
-                exclude_stems = ['other']  # 'other' typically contains guitar/lead instruments
-                self.logger.info("Using standard model: excluding 'other' stem")
-            
-            for stem_name, stem_audio in stems.items():
-                if stem_name not in exclude_stems:
-                    backing_stems.append(stem_audio)
-                    self.logger.info(f"Including stem: {stem_name}")
-                else:
-                    self.logger.info(f"Excluding stem: {stem_name} (contains guitar)")
-            
-            # Mix the backing tracks
-            if backing_stems:
-                backing_track = torch.stack(backing_stems).sum(dim=0)
-            else:
-                # Fallback: use all stems except guitar
-                if self.demucs_model == "htdemucs_6s":
-                    fallback_stems = ['drums', 'bass', 'vocals', 'piano', 'other']
-                else:
-                    fallback_stems = ['drums', 'bass', 'vocals']
-                    
-                backing_track = None
-                for stem_name in fallback_stems:
-                    if stem_name in stems:
-                        if backing_track is None:
-                            backing_track = stems[stem_name].clone()
-                        else:
-                            backing_track += stems[stem_name]
-                        self.logger.info(f"Using fallback stem: {stem_name}")
-                
-                if backing_track is None:
-                    raise ValueError("No suitable stems found for backing track")
-            
-            # Ensure backing_track is not None before saving
-            if backing_track is None:
-                raise ValueError("Failed to create backing track - no audio data available")
-            
-            # Save the backing track
-            torchaudio.save(str(output_path), backing_track, sr)
-            self.logger.info(f"Backing track saved: {output_path}")
-            
-            # Optionally save the isolated guitar track
+                include = [s for s in stems if s != 'other']
+
+            self.mix_stems(stems, sr, include, output_path, self.reduce_vocals)
+
             if save_guitar:
-                guitar_track = None
-                if self.demucs_model == "htdemucs_6s" and 'guitar' in stems:
-                    guitar_track = stems['guitar']
-                elif 'other' in stems:
-                    guitar_track = stems['other']
-                
-                if guitar_track is not None:
-                    guitar_output_path = output_path.with_name(f"{output_path.stem}_guitar{output_path.suffix}")
-                    torchaudio.save(str(guitar_output_path), guitar_track, sr)
-                    self.logger.info(f"Guitar track saved: {guitar_output_path}")
-                else:
-                    self.logger.warning("No guitar track found to save")
-            
+                guitar_stem = 'guitar' if self.demucs_model == "htdemucs_6s" else 'other'
+                if guitar_stem in stems:
+                    guitar_path = output_path.with_name(f"{output_path.stem}_guitar{output_path.suffix}")
+                    torchaudio.save(str(guitar_path), stems[guitar_stem], sr)
+                    self.logger.info(f"Guitar track saved: {guitar_path}")
         finally:
-            # Clean up temporary directory
             if temp_dir.exists():
                 import shutil
                 shutil.rmtree(temp_dir, ignore_errors=True)
@@ -563,192 +591,522 @@ class RocksmithGuitarMute:
             if output_dir.exists():
                 shutil.rmtree(output_dir)
     
-    def _output_exists(self, psarc_path: Path, output_dir: Path) -> bool:
+    def _make_variant_unique(self, variant_dir: Path, variant_name: str) -> None:
         """
-        Check if the output file already exists.
-        
-        Args:
-            psarc_path: Path to the input PSARC file
-            output_dir: Directory for output files
-            
-        Returns:
-            True if output file already exists
-        """
-        output_psarc = output_dir / psarc_path.name
-        return output_psarc.exists()
+        Build a fresh PSARC directory for this variant with correctly-named files
+        from the start, so all internal references are consistent.
 
-    def process_psarc_file(self, psarc_path: Path, output_dir: Path, force: bool = False) -> Optional[Path]:
+        Instead of renaming files in-place (which breaks some tools), this method:
+        1. Reads the original extracted directory
+        2. Creates a new directory structure with the variant key in all filenames
+        3. Copies files to their new locations
+        4. Updates all metadata (manifests, HSAN, xblock, aggregategraph) with
+           consistent references matching the new filenames
+        5. Updates BNK prefetch DATA to match the remixed audio
         """
-        Process a single PSARC file to remove guitar tracks.
-        
+        import uuid
+        import json
+        import struct
+
+        config = VARIANT_CONFIGS[variant_name]
+
+        # Find the top-level song directory (there should be exactly one)
+        song_dirs = [d for d in variant_dir.iterdir() if d.is_dir()]
+        if not song_dirs:
+            self.logger.warning("No song directory found in variant dir, skipping uniqueness")
+            return
+        song_dir = song_dirs[0]
+
+        # Detect the original DLC key from manifest JSON
+        original_key_mixed = None
+        manifest_files = list(song_dir.rglob("*.json"))
+        if manifest_files:
+            data = json.loads(manifest_files[0].read_text(encoding="utf-8"))
+            for entry in data.get("Entries", {}).values():
+                attrs = entry.get("Attributes", {})
+                if "DLCKey" in attrs:
+                    original_key_mixed = attrs["DLCKey"]
+                    break
+
+        if not original_key_mixed:
+            self.logger.warning("Could not detect DLC key, skipping uniqueness")
+            return
+
+        original_key_lower = original_key_mixed.lower()
+        new_key_mixed = f"{original_key_mixed}{config['suffix'].title().replace('_', '')}"
+        new_key_lower = new_key_mixed.lower()
+
+        # Human-readable label for SongName
+        variant_display = variant_name.replace("_", " ").title()
+
+        self.logger.info(f"Making variant unique: {original_key_mixed} -> {new_key_mixed}")
+
+        # Build a single PID mapping from original PID -> new PID, shared across
+        # manifest JSONs and HSAN so cross-references stay consistent.
+        pid_mapping = {}
+        for json_file in song_dir.rglob("*.json"):
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+            for entry_id in data.get("Entries", {}):
+                if entry_id not in pid_mapping:
+                    pid_mapping[entry_id] = uuid.uuid4().hex.upper()
+
+        # Create new song directory with the variant key name
+        new_song_dir = variant_dir / song_dir.name  # keep PSARC stem for Welder
+        # We'll rebuild in-place by processing each file
+
+        # Step 1: Copy all files to new locations with updated names.
+        # Build a mapping of old_relative_path -> new_relative_path
+        file_mapping = {}  # {old_path: new_path}
+        for item in sorted(song_dir.rglob("*")):
+            if not item.is_file():
+                continue
+            rel = item.relative_to(song_dir)
+            rel_str = str(rel).replace("\\", "/")
+
+            # Replace key in path components
+            new_rel_str = rel_str.replace(original_key_lower, new_key_lower)
+            file_mapping[rel] = Path(new_rel_str)
+
+        # Create a temporary new directory, copy files with new names
+        new_dir = variant_dir / f"{song_dir.name}__new"
+        for old_rel, new_rel in file_mapping.items():
+            src = song_dir / old_rel
+            dst = new_dir / new_rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+
+        # Replace old directory with new one
+        shutil.rmtree(song_dir)
+        new_dir.rename(song_dir)
+
+        # Step 2: Update JSON manifest files
+        for json_file in song_dir.rglob("*.json"):
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+
+            new_entries = {}
+            for entry_id, entry in data.get("Entries", {}).items():
+                attrs = entry.get("Attributes", {})
+                new_pid = pid_mapping.get(entry_id, uuid.uuid4().hex.upper())
+
+                if "DLCKey" in attrs:
+                    attrs["DLCKey"] = new_key_mixed
+                if "SongKey" in attrs:
+                    attrs["SongKey"] = new_key_mixed
+                if "PersistentID" in attrs:
+                    attrs["PersistentID"] = new_pid
+                if "SongName" in attrs:
+                    attrs["SongName"] = f"{attrs['SongName']} ({variant_display})"
+                if "FullName" in attrs:
+                    attrs["FullName"] = attrs["FullName"].replace(original_key_mixed, new_key_mixed)
+
+                # Update SongBank/PreviewBankPath to match new filenames
+                for bank_field in ("SongBank", "PreviewBankPath"):
+                    if bank_field in attrs and isinstance(attrs[bank_field], str):
+                        attrs[bank_field] = attrs[bank_field].replace(original_key_lower, new_key_lower)
+
+                # Update URN-style references to match new file paths.
+                # Skip SongEvent — it references the Wwise event name baked into the
+                # .bnk HIRC section; changing it would silence the audio.
+                for key, val in attrs.items():
+                    if isinstance(val, str) and val.startswith("urn:") and original_key_lower in val:
+                        attrs[key] = val.replace(original_key_lower, new_key_lower)
+
+                entry["Attributes"] = attrs
+                new_entries[new_pid] = entry
+
+            data["Entries"] = new_entries
+            json_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        # Step 3: Update HSAN files with same PID mapping
+        for hsan_file in song_dir.rglob("*.hsan"):
+            data = json.loads(hsan_file.read_text(encoding="utf-8"))
+
+            new_entries = {}
+            for entry_id, entry in data.get("Entries", {}).items():
+                new_pid = pid_mapping.get(entry_id, uuid.uuid4().hex.upper())
+                attrs = entry.get("Attributes", {})
+
+                if "DLCKey" in attrs:
+                    attrs["DLCKey"] = new_key_mixed
+                if "SongKey" in attrs:
+                    attrs["SongKey"] = new_key_mixed
+                if "PersistentID" in attrs:
+                    attrs["PersistentID"] = new_pid
+                if "SongName" in attrs and attrs["SongName"]:
+                    attrs["SongName"] = f"{attrs['SongName']} ({variant_display})"
+                if "FullName" in attrs:
+                    attrs["FullName"] = attrs["FullName"].replace(original_key_mixed, new_key_mixed)
+
+                for bank_field in ("SongBank", "PreviewBankPath"):
+                    if bank_field in attrs and isinstance(attrs[bank_field], str):
+                        attrs[bank_field] = attrs[bank_field].replace(original_key_lower, new_key_lower)
+
+                for key, val in attrs.items():
+                    if isinstance(val, str) and val.startswith("urn:") and original_key_lower in val:
+                        attrs[key] = val.replace(original_key_lower, new_key_lower)
+
+                entry["Attributes"] = attrs
+                new_entries[new_pid] = entry
+
+            data["Entries"] = new_entries
+            hsan_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        # Step 4: Update xblock XML — references already match new filenames
+        for xblock_file in song_dir.rglob("*.xblock"):
+            text = xblock_file.read_bytes().decode("utf-8-sig")
+            text = text.replace(original_key_lower, new_key_lower)
+            text = text.replace(original_key_mixed, new_key_mixed)
+            xblock_file.write_text(text, encoding="utf-8-sig")
+
+        # Step 5: Update aggregategraph .nt — references already match new filenames
+        for nt_file in song_dir.rglob("*.nt"):
+            text = nt_file.read_bytes().decode("utf-8-sig")
+            text = text.replace(original_key_lower, new_key_lower)
+            nt_file.write_text(text, encoding="utf-8-sig")
+
+        # Step 6: Rename WEM files to new media IDs so they don't collide
+        # with the original PSARC's audio when both are loaded in Rocksmith.
+        import hashlib
+        wem_id_mapping = {}  # {old_id_str: new_id_str}
+        audio_dir = None
+        for wem_file in song_dir.rglob("*.wem"):
+            audio_dir = wem_file.parent
+            old_id = wem_file.stem
+            # Generate a deterministic new ID from the variant name + old ID
+            hash_input = f"{new_key_lower}_{old_id}".encode()
+            new_id = str(int(hashlib.md5(hash_input).hexdigest()[:8], 16))
+            wem_id_mapping[old_id] = new_id
+            new_wem_path = wem_file.parent / f"{new_id}.wem"
+            wem_file.rename(new_wem_path)
+            self.logger.info(f"Renamed WEM: {old_id}.wem -> {new_id}.wem")
+
+        # Step 7: Update BNK files — replace ALL occurrences of old media IDs
+        # (DIDX, HIRC sound objects, etc.) and update prefetch DATA.
+        for bnk_file in song_dir.rglob("*.bnk"):
+            bnk_data = bytearray(bnk_file.read_bytes())
+
+            # First pass: find DIDX entries and DATA section for prefetch update
+            didx_entries = []  # [(old_media_id, offset_in_data, size)]
+            data_section_offset = None
+            pos = 0
+            while pos < len(bnk_data) - 8:
+                tag = bnk_data[pos:pos+4].decode('ascii', errors='replace')
+                chunk_len = struct.unpack_from('<I', bnk_data, pos+4)[0]
+                if tag == 'DIDX':
+                    n_entries = chunk_len // 12
+                    for i in range(n_entries):
+                        entry_pos = pos + 8 + i * 12
+                        mid = struct.unpack_from('<I', bnk_data, entry_pos)[0]
+                        offset = struct.unpack_from('<I', bnk_data, entry_pos + 4)[0]
+                        size = struct.unpack_from('<I', bnk_data, entry_pos + 8)[0]
+                        didx_entries.append((mid, offset, size))
+                elif tag == 'DATA':
+                    data_section_offset = pos + 8
+                pos += 8 + chunk_len
+
+            # Binary find-and-replace of all old media IDs with new ones
+            # throughout the entire BNK (covers DIDX, HIRC, and any other refs)
+            for old_id_str, new_id_str in wem_id_mapping.items():
+                old_bytes = struct.pack('<I', int(old_id_str))
+                new_bytes = struct.pack('<I', int(new_id_str))
+                search_pos = 0
+                while True:
+                    idx = bnk_data.find(old_bytes, search_pos)
+                    if idx == -1:
+                        break
+                    # Don't replace inside the DATA section (raw audio)
+                    if data_section_offset is not None:
+                        data_end = data_section_offset
+                        for _, off, sz in didx_entries:
+                            end = data_section_offset + off + sz
+                            if end > data_end:
+                                data_end = end
+                        if data_section_offset <= idx < data_end:
+                            search_pos = idx + 4
+                            continue
+                    bnk_data[idx:idx+4] = new_bytes
+                    search_pos = idx + 4
+
+            # Update prefetch DATA from the renamed WEM files
+            if didx_entries and data_section_offset is not None:
+                for old_mid, offset, size in didx_entries:
+                    wem_id = wem_id_mapping.get(str(old_mid), str(old_mid))
+                    wem_path = bnk_file.parent / f"{wem_id}.wem"
+                    if wem_path.exists():
+                        new_wem_bytes = wem_path.read_bytes()
+                        prefetch_bytes = new_wem_bytes[:size]
+                        if len(prefetch_bytes) == size:
+                            start = data_section_offset + offset
+                            bnk_data[start:start+size] = prefetch_bytes
+
+            bnk_file.write_bytes(bytes(bnk_data))
+
+        self.logger.info(f"Variant uniqueness applied: {variant_name}")
+
+    def _get_variant_output_path(self, psarc_path: Path, output_dir: Path, variant: str) -> Path:
+        """Get the output path for a specific variant of a PSARC file."""
+        suffix = VARIANT_CONFIGS[variant]["suffix"]
+        stem = psarc_path.stem
+        # Rocksmith only loads PSARCs ending in a platform suffix (_p, _m, _ps4, _xb1).
+        # Strip it, insert the variant suffix, then restore it so the file is recognized.
+        platform_suffixes = ("_p", "_m", "_ps4", "_xb1", "_ps3")
+        platform = ""
+        for ps in platform_suffixes:
+            if stem.endswith(ps):
+                stem = stem[: -len(ps)]
+                platform = ps
+                break
+        return output_dir / f"{stem}{suffix}{platform}.psarc"
+
+    def _output_exists(self, psarc_path: Path, output_dir: Path, variants: Optional[list] = None) -> bool:
+        """
+        Check if all variant output files already exist.
+
         Args:
             psarc_path: Path to the input PSARC file
             output_dir: Directory for output files
-            force: If True, process even if output file exists
-            
+            variants: List of variant names to check (defaults to DEFAULT_VARIANTS)
+
         Returns:
-            Path to the processed PSARC file or None if skipped
+            True if ALL variant output files already exist
         """
+        if variants is None:
+            variants = DEFAULT_VARIANTS
+        return all(
+            self._get_variant_output_path(psarc_path, output_dir, v).exists()
+            for v in variants
+        )
+
+    def process_psarc_file(self, psarc_path: Path, output_dir: Path,
+                           force: bool = False,
+                           variants: Optional[list] = None) -> List[Path]:
+        """
+        Process a single PSARC file to produce one or more stem-mix variants.
+
+        Args:
+            psarc_path: Path to the input PSARC file
+            output_dir: Directory for output files
+            force: If True, process even if output files exist
+            variants: List of variant names to produce (defaults to DEFAULT_VARIANTS)
+
+        Returns:
+            List of paths to the processed PSARC files
+        """
+        if variants is None:
+            variants = DEFAULT_VARIANTS
+
         self.logger.info(f"Starting PSARC processing: {psarc_path}")
+        self.logger.info(f"Variants to produce: {', '.join(variants)}")
         self.logger.debug(f"Input file size: {psarc_path.stat().st_size} bytes")
-        self.logger.debug(f"Output directory: {output_dir}")
-        self.logger.debug(f"Force processing: {force}")
-        
+
+        # Warn if model may not support required stems
+        six_stem_models = {"htdemucs_6s"}
+        if self.demucs_model not in six_stem_models:
+            needs_6s = set()
+            for v in variants:
+                config = VARIANT_CONFIGS[v]
+                for s in config["include_stems"]:
+                    if s in ("guitar", "piano"):
+                        needs_6s.add(s)
+            if needs_6s:
+                self.logger.warning(
+                    f"Model '{self.demucs_model}' does not separate {needs_6s} as individual stems. "
+                    f"Variants referencing these stems will produce incorrect results. "
+                    f"Use 'htdemucs_6s' for proper guitar/piano separation."
+                )
+
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_psarc = output_dir / psarc_path.name
-        
-        # Check if output already exists
-        if not force and self._output_exists(psarc_path, output_dir):
-            self.logger.info(f"Output file already exists, skipping: {output_psarc}")
-            return output_psarc
-        
+
+        # Check if all outputs already exist
+        if not force and self._output_exists(psarc_path, output_dir, variants):
+            outputs = [self._get_variant_output_path(psarc_path, output_dir, v) for v in variants]
+            self.logger.info(f"All variant outputs already exist, skipping")
+            return outputs
+
+        produced = []
+
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             extract_dir = temp_path / "extracted"
-            
+            demucs_dir = temp_path / "demucs_out"
+            demucs_dir.mkdir()
+
             try:
-                # Step 1: Unpack PSARC
+                # Step 1: Unpack PSARC (once)
                 self.unpack_psarc(psarc_path, extract_dir)
-                
-                # Step 2: Find and process audio files
+
+                # Step 2: Find audio files
                 audio_files = self.find_audio_files(extract_dir)
-                
+
+                # Step 3: Separate stems for each audio file (once — the expensive step)
+                # Store: {audio_file_path: (stems_dict, sample_rate, original_suffix)}
+                separated = {}
                 for audio_file in audio_files:
                     if audio_file.suffix.lower() == '.wem':
-                        # Convert WEM to WAV for processing
                         wav_file = audio_file.with_suffix('.wav')
                         self.convert_wem_to_wav(audio_file, wav_file)
-                        
-                        # Remove guitar track
-                        processed_wav = wav_file.with_name(f"{wav_file.stem}_processed.wav")
-                        self.remove_guitar_track(wav_file, processed_wav, save_guitar=False)
-                        
-                        # Convert back to WEM and replace original
-                        self.convert_wav_to_wem(processed_wav, audio_file)
-                        
-                        # Clean up temporary files
+                        stems, sr = self.separate_stems(wav_file, demucs_dir)
+                        separated[audio_file] = (stems, sr, '.wem')
                         wav_file.unlink(missing_ok=True)
-                        processed_wav.unlink(missing_ok=True)
-                    
                     elif audio_file.suffix.lower() in ['.ogg', '.wav']:
-                        # Process directly
-                        processed_file = audio_file.with_name(f"{audio_file.stem}_processed{audio_file.suffix}")
-                        self.remove_guitar_track(audio_file, processed_file, save_guitar=False)
-                        
-                        # Replace original with processed version
-                        shutil.move(processed_file, audio_file)
-                
-                # Step 3: Repack PSARC
-                self.repack_psarc(extract_dir, output_psarc)
-                
+                        stems, sr = self.separate_stems(audio_file, demucs_dir)
+                        separated[audio_file] = (stems, sr, audio_file.suffix.lower())
+
+                # Step 4: For each variant, mix stems, replace audio, repack
+                for variant_name in variants:
+                    config = VARIANT_CONFIGS[variant_name]
+                    output_psarc = self._get_variant_output_path(psarc_path, output_dir, variant_name)
+
+                    # Skip if this specific variant already exists (unless force)
+                    if not force and output_psarc.exists():
+                        self.logger.info(f"Variant already exists, skipping: {output_psarc.name}")
+                        produced.append(output_psarc)
+                        continue
+
+                    self.logger.info(f"Building variant: {variant_name} ({config['suffix']})")
+
+                    # Copy the extracted directory for this variant
+                    variant_dir = temp_path / f"variant_{variant_name}"
+                    shutil.copytree(extract_dir, variant_dir)
+
+                    # Mix and replace each audio file
+                    for original_audio, (stems, sr, orig_suffix) in separated.items():
+                        # Compute relative path from extract_dir to find corresponding file in variant_dir
+                        rel_path = original_audio.relative_to(extract_dir)
+                        variant_audio = variant_dir / rel_path
+
+                        # Mix stems for this variant
+                        mixed_wav = variant_audio.with_name(f"{variant_audio.stem}_mixed.wav")
+                        self.mix_stems(stems, sr, config["include_stems"], mixed_wav, self.reduce_vocals)
+
+                        if orig_suffix == '.wem':
+                            # Convert mixed WAV back to WEM, replacing the original
+                            self.convert_wav_to_wem(mixed_wav, variant_audio)
+                            mixed_wav.unlink(missing_ok=True)
+                        else:
+                            # Replace original with mixed version
+                            shutil.move(mixed_wav, variant_audio)
+
+                    # Make this variant's metadata unique so it doesn't collide in Rocksmith
+                    self._make_variant_unique(variant_dir, variant_name)
+
+                    # Repack this variant
+                    self.repack_psarc(variant_dir, output_psarc)
+                    produced.append(output_psarc)
+                    self.logger.info(f"Variant complete: {output_psarc.name}")
+
+                    # Clean up variant directory
+                    shutil.rmtree(variant_dir, ignore_errors=True)
+
             except Exception as e:
                 self.logger.error(f"Error processing {psarc_path}: {e}")
                 raise
-        
-        return output_psarc
+
+        return produced
     
-    def process_input(self, input_path: Path, output_dir: Path, max_workers: Optional[int] = None, force: bool = False) -> List[Path]:
+    def process_input(self, input_path: Path, output_dir: Path,
+                      max_workers: Optional[int] = None, force: bool = False,
+                      variants: Optional[list] = None) -> List[Path]:
         """
         Process input path (file or directory) and return list of processed files.
         Uses parallel processing to maximize performance.
-        
+
         Args:
             input_path: Path to input file or directory
             output_dir: Directory for output files
             max_workers: Maximum number of parallel workers (default: number of CPU cores)
             force: If True, process even if output file exists
-            
+            variants: List of variant names to produce
+
         Returns:
             List of processed PSARC file paths
         """
+        if variants is None:
+            variants = DEFAULT_VARIANTS
+
         processed_files = []
-        
+
         # Determine max workers (default to number of CPU cores)
         if max_workers is None:
             max_workers = multiprocessing.cpu_count()
-        
+
         self.logger.info(f"Using {max_workers} parallel workers for processing")
-        
+
         if input_path.is_file():
             if input_path.suffix.lower() == '.psarc':
-                # Single file processing
-                processed_file = self.process_psarc_file(input_path, output_dir, force=force)
-                if processed_file:
-                    processed_files.append(processed_file)
+                results = self.process_psarc_file(input_path, output_dir, force=force, variants=variants)
+                processed_files.extend(results)
             else:
                 self.logger.warning(f"Skipping non-PSARC file: {input_path}")
-        
+
         elif input_path.is_dir():
             psarc_files = list(input_path.glob("*.psarc"))
             self.logger.info(f"Found {len(psarc_files)} PSARC files in directory")
-            
+
             if not psarc_files:
                 self.logger.warning("No PSARC files found in directory")
                 return processed_files
-            
+
             # Filter files that need processing (skip existing unless force=True)
             files_to_process = []
             for psarc_file in psarc_files:
-                if force or not self._output_exists(psarc_file, output_dir):
+                if force or not self._output_exists(psarc_file, output_dir, variants):
                     files_to_process.append(psarc_file)
                 else:
-                    # File already exists, add to results but don't process
-                    existing_file = output_dir / psarc_file.name
-                    processed_files.append(existing_file)
-                    self.logger.info(f"Output already exists, skipping: {existing_file}")
-            
+                    existing = [self._get_variant_output_path(psarc_file, output_dir, v) for v in variants]
+                    processed_files.extend(existing)
+                    self.logger.info(f"All variants already exist, skipping: {psarc_file.name}")
+
             self.logger.info(f"Processing {len(files_to_process)} files ({len(psarc_files) - len(files_to_process)} skipped)")
-            
+
             if files_to_process:
                 # Prepare arguments for parallel processing
                 process_args = [
-                    (psarc_file, output_dir, self.demucs_model, self.device, force, self.reduce_vocals)
+                    (psarc_file, output_dir, self.demucs_model, self.device, force, self.reduce_vocals, variants)
                     for psarc_file in files_to_process
                 ]
-                
+
                 # Use ProcessPoolExecutor for CPU-bound tasks
                 with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                    # Submit all tasks
                     future_to_file = {
-                        executor.submit(process_single_psarc_worker, args): args[0] 
+                        executor.submit(process_single_psarc_worker, args): args[0]
                         for args in process_args
                     }
-                    
-                    # Collect results as they complete
+
                     for future in as_completed(future_to_file):
                         psarc_file = future_to_file[future]
                         try:
                             result = future.result()
                             if result:
-                                processed_files.append(result)
-                                self.logger.info(f"Successfully processed: {result}")
+                                processed_files.extend(result)
+                                for r in result:
+                                    self.logger.info(f"Successfully processed: {r}")
                             else:
                                 self.logger.error(f"Failed to process: {psarc_file}")
                         except Exception as e:
                             self.logger.error(f"Exception processing {psarc_file}: {e}")
-        
+
         else:
             raise ValueError(f"Input path does not exist: {input_path}")
-        
+
         return processed_files
 
 
-def process_single_psarc_worker(args_tuple: Tuple[Path, Path, str, str, bool, int]) -> Optional[Path]:
+def process_single_psarc_worker(args_tuple) -> Optional[List[Path]]:
     """
     Worker function for parallel processing of PSARC files.
-    
+
     Args:
-        args_tuple: Tuple containing (psarc_path, output_dir, demucs_model, device, force, reduce_vocals)
-        
+        args_tuple: Tuple containing (psarc_path, output_dir, demucs_model, device, force, reduce_vocals, variants)
+
     Returns:
-        Path to processed file or None if skipped/failed
+        List of paths to processed files or None if failed
     """
-    psarc_path, output_dir, demucs_model, device, force, reduce_vocals = args_tuple
-    
+    psarc_path, output_dir, demucs_model, device, force, reduce_vocals, variants = args_tuple
+
     try:
-        # Create a new processor instance for this worker
         processor = RocksmithGuitarMute(demucs_model=demucs_model, device=device, reduce_vocals=reduce_vocals)
-        return processor.process_psarc_file(psarc_path, output_dir, force=force)
+        return processor.process_psarc_file(psarc_path, output_dir, force=force, variants=variants)
     except Exception as e:
         logging.getLogger(__name__).error(f"Failed to process {psarc_path}: {e}")
         return None
@@ -879,12 +1237,12 @@ def _log_system_info(log_file: Path) -> None:
             lib = __import__(lib_name)
             version = getattr(lib, '__version__', 'Unknown version')
             location = getattr(lib, '__file__', 'Unknown location')
-            logger.info(f"  ✅ {lib_name} ({description}): v{version}")
+            logger.info(f"  [OK] {lib_name} ({description}): v{version}")
             logger.debug(f"     Location: {location}")
         except ImportError as e:
-            logger.error(f"  ❌ {lib_name} ({description}): MISSING - {e}")
+            logger.error(f"  [MISSING] {lib_name} ({description}): MISSING - {e}")
         except Exception as e:
-            logger.warning(f"  ⚠️  {lib_name} ({description}): ERROR - {e}")
+            logger.warning(f"  [WARN] {lib_name} ({description}): ERROR - {e}")
     
     # PyTorch specific info
     try:
@@ -916,9 +1274,9 @@ def _log_system_info(log_file: Path) -> None:
                 
                 with contextlib.redirect_stdout(captured_output), contextlib.redirect_stderr(captured_error):
                     model = demucs.pretrained.get_model(model_name)
-                logger.info(f"  ✅ {model_name}: Available")
+                logger.info(f"  [OK] {model_name}: Available")
             except Exception as e:
-                logger.warning(f"  ⚠️  {model_name}: Not available - {e}")
+                logger.warning(f"  [WARN] {model_name}: Not available - {e}")
     except Exception as e:
         logger.error(f"Error checking Demucs models: {e}")
     
@@ -945,14 +1303,14 @@ def _log_system_info(log_file: Path) -> None:
                 if full_path.is_dir():
                     try:
                         file_count = len(list(full_path.iterdir()))
-                        logger.info(f"  ✅ {path_name}/: Directory exists ({file_count} items)")
+                        logger.info(f"  [OK] {path_name}/: Directory exists ({file_count} items)")
                     except:
-                        logger.info(f"  ✅ {path_name}/: Directory exists (cannot count items)")
+                        logger.info(f"  [OK] {path_name}/: Directory exists (cannot count items)")
                 else:
                     size = full_path.stat().st_size
-                    logger.info(f"  ✅ {path_name}: File exists ({size} bytes)")
+                    logger.info(f"  [OK] {path_name}: File exists ({size} bytes)")
             else:
-                logger.warning(f"  ❌ {path_name}: Missing")
+                logger.warning(f"  [MISSING] {path_name}: Missing")
                 
     except Exception as e:
         logger.error(f"Error checking file system: {e}")
@@ -1044,8 +1402,49 @@ Examples:
         default=100,
         help="Reduce vocals volume (0 = mute, 100 = original volume, default: 100)"
     )
-    
+
+    parser.add_argument(
+        "--variants",
+        nargs="+",
+        choices=list(VARIANT_CONFIGS.keys()) + ["all"],
+        default=None,
+        help="Stem mix variants to produce (default: no_guitar). "
+             "Use 'all' to produce all variants. "
+             "Available: " + ", ".join(VARIANT_CONFIGS.keys())
+    )
+
+    parser.add_argument(
+        "--custom",
+        action="append",
+        metavar="NAME:STEMS",
+        default=[],
+        help="Custom variant as 'name:stem1,stem2,...'. Can be repeated. "
+             "Valid stems: " + ", ".join(ALL_STEMS)
+    )
+
     args = parser.parse_args()
+
+    # Parse custom variants and add to VARIANT_CONFIGS
+    for spec in args.custom:
+        name, config = parse_custom_variant(spec)
+        if name in VARIANT_CONFIGS:
+            print(f"[WARN] Custom variant '{name}' overrides built-in variant")
+        VARIANT_CONFIGS[name] = config
+
+    # Resolve variants
+    if args.variants is None and not args.custom:
+        args.variants = DEFAULT_VARIANTS
+    elif args.variants is None:
+        args.variants = []
+
+    if args.variants and "all" in args.variants:
+        args.variants = ALL_VARIANTS
+
+    # Add custom variant names to the variants list
+    for spec in args.custom:
+        name = spec.split(":", 1)[0].strip()
+        if name not in args.variants:
+            args.variants.append(name)
     
     # Setup logging first thing
     setup_logging(args.verbose)
@@ -1076,10 +1475,11 @@ Examples:
         # Process files
         logger.info("Starting RockSmith Guitar Mute processing...")
         processed_files = processor.process_input(
-            args.input_path, 
-            args.output_dir, 
+            args.input_path,
+            args.output_dir,
             max_workers=args.workers,
-            force=args.force
+            force=args.force,
+            variants=args.variants
         )
         
         # Report results
